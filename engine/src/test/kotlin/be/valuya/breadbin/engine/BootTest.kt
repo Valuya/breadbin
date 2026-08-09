@@ -144,6 +144,41 @@ class BootTest {
             text.any { it.contains("IT LOADED") })
     }
 
+    /**
+     * The path the app actually takes when a .d64 is opened with autostart on.
+     *
+     * This is worth testing separately because the RUN is typed on a timer, two seconds after the
+     * LOAD, and a drive that answers the bus at a real drive's speed takes far longer than that.
+     * It works because the characters sit in the KERNAL's keyboard buffer until BASIC comes back
+     * for them, which is exactly the sort of thing that is true right up until it is not.
+     */
+    @Test
+    fun `opening a disk with autostart runs what is on it`() {
+        val roms = roms()
+        assumeTrue(roms != null)
+        val machine = Machine(roms!!)
+
+        val disk = D64.blank(Petscii.fromAscii("GAMES"), Petscii.fromAscii("01"))
+        disk.writeFile(
+            Petscii.fromAscii("THE GAME"),
+            intArrayOf(0x01, 0x08) + basicPrint("AUTOSTARTED"),
+            fileType = 2,
+            replace = false,
+        )
+        machine.insertDisk(disk)
+
+        repeat(200) { machine.runFrame() }
+        machine.autostartDisk()
+        repeat(1200) { machine.runFrame() }
+
+        val text = screen(machine)
+        println(text.joinToString("\n") { "|$it" })
+        assertTrue(
+            "autostart did not get there:\n${text.joinToString("\n")}",
+            text.any { it.contains("AUTOSTARTED") },
+        )
+    }
+
     @Test
     fun `a program loads off a tape, pulse by pulse`() {
         val roms = roms()
