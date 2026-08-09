@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The blue the machine came up in, and the light blue it wrote in. -->
+    <!--
+        What is behind the window before Compose has drawn anything. Plain, so that starting the app
+        does not flash a colour that nothing else on the screen will use; the night variant keeps
+        that flash from being white on a dark device.
+    -->
+    <color name="window_background">#FFFDFCFF</color>
+
+    <!-- The blue the machine came up in, which is still what the emulator screen is framed in. -->
     <color name="breadbin_blue">#FF2E2C9B</color>
-    <color name="breadbin_light_blue">#FF706DEB</color>
-    <color name="breadbin_beige">#FFB2B2B2</color>
 </resources>

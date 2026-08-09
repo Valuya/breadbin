@@ -4,17 +4,22 @@
     <!-- Setup -->
     <string name="setup_title">Ready when you are</string>
     <string name="setup_explanation">Breadbin comes with Open ROMs, a free replacement for the Commodore 64\'s BASIC, KERNAL and character set, so it works straight away. Disks, tapes, cartridges and BASIC all run on them.</string>
-    <string name="setup_limit">Commodore\'s own ROMs are still worth having. They are what everything was written against, so anything that behaves oddly on the free ones is worth trying again on those.</string>
-    <string name="setup_where">If you own a C64 you can read them off it. Otherwise they come with VICE, the desktop emulator. Breadbin will not fetch them for you; the button opens the download page in your browser and you bring the files back.</string>
+    <string name="setup_limit">Commodore\'s own ROMs are worth adding. Games of the era jump straight into the KERNAL as often as they call it, and the free ROMs are a rewrite that does not have the same code at the same addresses — so a game that halts or misbehaves on them will usually run on Commodore\'s. The KERNAL you want is revision 3, 901227-03.</string>
+    <string name="setup_where">Opens VICE\'s download page in your browser</string>
     <string name="setup_open_vice">Where to get them</string>
     <string name="setup_start_free">Start with the free ROMs</string>
     <string name="setup_using_free">Using the free ROMs</string>
     <string name="setup_using_supplied">Using Commodore\'s ROMs</string>
-    <string name="setup_pick">Choose ROM files</string>
-    <string name="setup_pick_hint">Pick all three at once, or one at a time — Breadbin works out which is which.</string>
+    <string name="setup_pick">Choose files</string>
+    <string name="setup_pick_hint">A zip, or the ROMs themselves — Breadbin works out which is which</string>
     <string name="setup_basic">BASIC</string>
     <string name="setup_kernal">KERNAL</string>
     <string name="setup_character">Character set</string>
+    <string name="setup_section_roms">ROMs</string>
+    <string name="setup_section_add">Add Commodore\'s ROMs</string>
+    <string name="setup_took">Took %1$s ROM(s) from what you chose.</string>
+    <string name="setup_cancel">Cancel</string>
+    <string name="setup_download_hint_short">From an address you paste in</string>
     <string name="setup_drive">1541 DOS (optional)</string>
     <string name="setup_missing">Not loaded</string>
     <string name="setup_loaded">Loaded</string>
@@ -31,6 +36,7 @@
     <!-- Library -->
     <string name="library_title">Breadbin</string>
     <string name="library_empty">Nothing here yet.\n\nAdd a disk, tape, cartridge or program and it will show up in this list.</string>
+    <string name="library_add_hint">Zips are unpacked for you</string>
     <string name="library_add">Add files</string>
     <string name="library_settings">Settings</string>
     <string name="library_basic">Just BASIC</string>

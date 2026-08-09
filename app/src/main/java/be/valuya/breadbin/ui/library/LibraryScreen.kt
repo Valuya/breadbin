@@ -77,7 +77,9 @@ fun LibraryScreen(
         var added = 0
         var rejected: String? = null
         for (uri in uris) {
-            if (library.add(uri) != null) added++ else rejected = uri.lastPathSegment.orEmpty()
+            // A zip can hold several games, so this counts what came out rather than what went in.
+            val taken = library.addAll(uri)
+            if (taken.isEmpty()) rejected = uri.lastPathSegment.orEmpty() else added += taken.size
         }
         items = library.list()
         scope.launch {

@@ -64,7 +64,7 @@ fun BreadbinApp(
     LaunchedEffect(opened) {
         val uri = opened ?: return@LaunchedEffect
         onOpenedHandled()
-        val item = library.add(uri) ?: return@LaunchedEffect
+        val item = library.addAll(uri).firstOrNull() ?: return@LaunchedEffect
         sessionHolder.stop()
         navController.navigate("$EMULATOR/${encode(item.file.name)}")
     }

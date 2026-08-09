@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import be.valuya.breadbin.engine.tape.Media
+import be.valuya.breadbin.engine.Zip
 import be.valuya.breadbin.engine.tape.MediaKind
 import java.io.File
 
@@ -39,9 +40,26 @@ class MediaLibrary(private val context: Context) {
             .orEmpty()
 
     /** Copies a picked file in. Returns the item, or null if it is not something we can run. */
-    fun add(uri: Uri): MediaItem? {
-        val name = displayName(uri) ?: return null
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+    fun add(uri: Uri): MediaItem? = addAll(uri).firstOrNull()
+
+    /**
+     * The same, for a file that might be a zip.
+     *
+     * Games arrive in archives far more often than they arrive loose, and an emulator that makes
+     * you unpack one first is an emulator you have to go and find a file manager for. Everything
+     * inside that Breadbin can run is copied in and everything else is ignored.
+     */
+    fun addAll(uri: Uri): List<MediaItem> {
+        val name = displayName(uri) ?: return emptyList()
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: return emptyList()
+        if (Zip.isZip(bytes)) {
+            return Zip.entries(bytes).mapNotNull { store(it.fileName, it.bytes) }
+        }
+        return listOfNotNull(store(name, bytes))
+    }
+
+    private fun store(name: String, bytes: ByteArray): MediaItem? {
         val kind = Media.identify(bytes, name)
         if (kind == MediaKind.UNKNOWN) return null
 
