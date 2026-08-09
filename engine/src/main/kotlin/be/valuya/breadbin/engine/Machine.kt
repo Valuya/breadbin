@@ -8,6 +8,8 @@ import be.valuya.breadbin.engine.cpu.Bus
 import be.valuya.breadbin.engine.cpu.Cpu6510
 import be.valuya.breadbin.engine.disk.D64
 import be.valuya.breadbin.engine.disk.Iec
+import be.valuya.breadbin.engine.drive.Drive1541
+import be.valuya.breadbin.engine.drive.IecBus
 import be.valuya.breadbin.engine.mem.Memory
 import be.valuya.breadbin.engine.mem.Roms
 import be.valuya.breadbin.engine.sid.Sid
@@ -29,6 +31,12 @@ class Machine(
     private val roms: Roms,
     val model: VideoModel = VideoModel.PAL,
     sampleRate: Int = 48_000,
+    /**
+     * The 1541's own DOS ROM. Supplying it emulates a real drive, down to its processor, which is
+     * what fast loaders need; leaving it out falls back to answering the KERNAL's serial routines
+     * from the image, which is instant but only serves programs that load through the KERNAL.
+     */
+    driveRom: IntArray? = null,
 ) {
     val memory = Memory(roms)
     val vic = VicII(memory, model)
@@ -43,11 +51,32 @@ class Machine(
 
     val cia1 = Cia(keyboard, model.clockHz) { asserted -> cia1Interrupt = asserted }
 
+    /** The three wires to the drive. */
+    val serialBus = IecBus()
+
+    /** The real drive, when one is fitted. */
+    val drive: Drive1541? = driveRom?.let { Drive1541(it, serialBus) }
+
     private val serialPorts = object : CiaPorts {
-        // Nothing is wired to the serial bus or the user port: the drive is emulated above the
-        // KERNAL rather than below it, so these lines only need to read back sanely.
-        override fun readPortA(cia: Cia) = cia.portA
+        override fun readPortA(cia: Cia): Int {
+            // The outputs are inverted on their way to the bus but the inputs are not: bits 6 and
+            // 7 read the two lines as they stand, so a line nobody is pulling down reads as a one.
+            var value = cia.portA and 0x3F
+            if (!serialBus.clock) value = value or 0x40
+            if (!serialBus.data) value = value or 0x80
+            return value
+        }
+
         override fun readPortB(cia: Cia) = cia.portB
+
+        override fun writePortA(value: Int) {
+            // Setting one of these bits pulls its line low, which is the only thing any device on
+            // this bus can do to it.
+            serialBus.computerAtn = value and 0x08 != 0
+            serialBus.computerClock = value and 0x10 != 0
+            serialBus.computerData = value and 0x20 != 0
+            drive?.onAtnChanged()
+        }
     }
 
     val cia2 = Cia(serialPorts, model.clockHz) { asserted -> cia2Interrupt = asserted }
@@ -78,6 +107,7 @@ class Machine(
     private var framesSinceReset = 0
     private var pendingProgram: Program? = null
     private var pendingRun = true
+    private var driveClockRemainder = 0
 
     /** True when the virtual drive could be patched into this KERNAL. */
     var virtualDriveAvailable = false
@@ -101,7 +131,9 @@ class Machine(
         }
         iec.onDiskChanged = { device, disk -> onDiskChanged?.invoke(device, disk) }
         vic.onFrameComplete = { frameComplete = true }
-        virtualDriveAvailable = iec.install(roms)
+        // With a real drive fitted the KERNAL is left alone: patching its serial routines would
+        // take the transfers away from the very thing being emulated.
+        virtualDriveAvailable = drive == null && iec.install(roms)
         reset()
     }
 
@@ -117,6 +149,8 @@ class Machine(
         iec.reset()
         datasette.reset()
         memory.cartridge?.reset()
+        serialBus.reset()
+        drive?.reset()
         keystrokes.clear()
         framesSinceReset = 0
         framesUntilKeystrokes = 0
@@ -153,15 +187,47 @@ class Machine(
         cia2.cycle()
         sid.clock()
         datasette.cycle()
+        runDrive()
         cycles++
         cpu.irqLine = vic.irq || cia1Interrupt
         cpu.setNmiLine(cia2Interrupt || restoreHeld)
     }
 
+    /**
+     * The drive's crystal is not the computer's: it runs a little over one and a half per cent
+     * faster than a PAL C64. Fast loaders time themselves against that difference, so it is kept
+     * rather than rounded away, and the drive is stepped every cycle rather than in batches — a
+     * loader synchronising on a line transition would not survive being told about it late.
+     */
+    private fun runDrive() {
+        val current = drive ?: return
+        driveClockRemainder += Drive1541.CLOCK_HZ
+        while (driveClockRemainder >= model.clockHz) {
+            driveClockRemainder -= model.clockHz
+            current.advance(1)
+        }
+    }
+
     // ---- what is plugged in --------------------------------------------------------------------
 
     fun insertDisk(disk: D64?, device: Int = 8) {
+        val real = drive
+        if (real != null && device == real.deviceNumber) {
+            real.insert(disk)
+            return
+        }
         iec.mount(device, disk)
+    }
+
+    /** Writes anything the real drive has changed back into its image. */
+    fun flushDrive() {
+        val real = drive ?: return
+        real.flush()
+        val disk = iec.disk(real.deviceNumber)
+        if (disk != null && disk.dirty) {
+            onDiskChanged?.invoke(real.deviceNumber, disk)
+            disk.markClean()
+        }
     }
 
     fun insertTape(tape: TapImage?) {

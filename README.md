@@ -91,6 +91,23 @@ These are real limits, not oversights:
 - **The SID filter** is a state variable filter, not a model of the analogue original. Filter sweeps
   sound right. They do not sound like your particular 6581.
 
+## The real drive, unfinished
+
+`engine/.../drive/` holds a genuine 1541: its own 6502, two 6522 VIAs, the stepper and the motor,
+and the disk as a track of GCR bits going past a head rather than as a file of sectors. It exists
+because a fast loader is a program that runs *on the drive's processor*, and nothing above the
+KERNAL can ever serve one.
+
+It is not finished, and it is not wired into the app. What works, and is covered by tests: the
+drive boots its own DOS, the computer stops reporting it missing, the motor spins, the head seeks
+to the directory track, and bytes come off the surface at the rate the surface goes past. What does
+not: a transfer does not complete. The fault is somewhere in the two VIAs or in how the DOS's read
+loop is being answered. `DriveBootTest` holds both the parts that pass and, marked ignored, the two
+that say when it is done.
+
+Using it needs the 1541's own DOS ROM as well as the computer's three, which is worth knowing before
+counting on it: emulating the drive properly does not remove the ROM problem, it adds to it.
+
 ## Building
 
 Needs a JDK 21+ and an Android SDK with platform 37.
@@ -106,7 +123,7 @@ Minimum Android version: 7.0 (API 24).
 
 ## Tests
 
-`./gradlew test` runs 48 of them. The ones that matter:
+`./gradlew test` runs 57 of them. The ones that matter:
 
 - **The processor passes Klaus Dormann's 6502 functional test** — every documented opcode,
   addressing mode, flag interaction and decimal-mode case, run to the success trap. The test binary
@@ -124,6 +141,9 @@ Minimum Android version: 7.0 (API 24).
   PRESENT the way the KERNAL expects to hear them.
 - **Disk images survive a round trip**: sector chains, the BAM, replacing a file, scratching one,
   and more files than one directory sector holds.
+- **GCR is exact**: every byte survives encoding and decoding, no encoded byte can be mistaken for a
+  sync mark, and a whole track built for a real drive reads back with every sector intact and takes
+  a fifth of a second to go past the head, as a disk turning at 300 rpm does.
 
 ### The boot test
 
