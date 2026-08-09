@@ -1,0 +1,21 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+.kotlin/
+
+# Upload key: never in the repository. Losing it costs the ability to update the
+# app on Play; leaking it hands that ability to somebody else.
+/keystore.properties
+*.jks
+*.keystore
+
+# Python leaves these behind next to the build tools in tools/.
+__pycache__/
+*.pyc

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same again for Android 12 and later: the library travels, the ROMs stay where they were put. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="media/" />
+        <include domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="media/" />
+        <include domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>

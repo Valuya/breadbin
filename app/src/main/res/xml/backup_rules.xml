@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The library and the settings are worth carrying to a new phone. The ROMs are not: they are not
+  ours to copy around, and only what is listed here is backed up, so leaving them out is enough.
+-->
+<full-backup-content>
+    <include domain="file" path="media/" />
+    <include domain="sharedpref" path="." />
+</full-backup-content>
