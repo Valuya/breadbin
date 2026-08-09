@@ -2,6 +2,7 @@ package be.valuya.breadbin.data
 
 import android.content.Context
 import android.net.Uri
+import be.valuya.breadbin.engine.Zip
 import be.valuya.breadbin.engine.mem.RomKind
 import be.valuya.breadbin.engine.mem.Roms
 import java.io.File
@@ -45,11 +46,32 @@ class RomStore(private val context: Context) {
      * Stores a file the user picked, working out from its contents which of the three it is.
      * Returns what it turned out to be, or null if it was not a ROM at all.
      */
-    fun accept(uri: Uri): RomKind? {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-        val kind = Roms.identify(bytes) ?: return null
+    fun accept(uri: Uri): RomKind? = acceptAll(uri).lastOrNull()
+
+    /**
+     * The same, for a file that might be a zip.
+     *
+     * ROMs are downloaded as a set, in one archive, and asking somebody to unpack it first means
+     * asking them to go and find a file manager. Everything inside that looks like a ROM is taken
+     * and everything else is ignored, so pointing this at a general-purpose archive is harmless.
+     */
+    fun acceptAll(uri: Uri): List<RomKind> {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: return emptyList()
+        if (Zip.isZip(bytes)) {
+            val taken = mutableListOf<RomKind>()
+            for (entry in Zip.entries(bytes)) {
+                val kind = Roms.identify(entry.bytes) ?: continue
+                // A set usually holds several revisions of the same ROM. Later ones win, which for
+                // an alphabetically ordered archive means the newest revision of each.
+                accept(entry.bytes, kind)
+                taken += kind
+            }
+            return taken
+        }
+        val kind = Roms.identify(bytes) ?: return emptyList()
         accept(bytes, kind)
-        return kind
+        return listOf(kind)
     }
 
     /** Stores bytes that have already been identified, whatever they arrived by. */

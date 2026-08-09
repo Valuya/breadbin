@@ -5,7 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,25 +13,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.outlined.Circle
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -41,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -52,16 +56,19 @@ import be.valuya.breadbin.engine.mem.RomKind
 import kotlinx.coroutines.launch
 
 /**
- * The first thing anybody sees, and deliberately not a wall.
+ * The first thing anybody sees, and an ordinary settings screen rather than a production.
  *
- * The app ships free replacement ROMs and can start on them immediately, so this screen explains
- * what that costs — disks — and offers the ways out rather than demanding one: a link to the page
- * that has the files, the file picker, or an address to fetch from.
+ * It used to be a full-bleed layout in the machine's own colours, which read beautifully in a
+ * screenshot and was unreadable on a phone. This is a title bar, some sections, and a list — the
+ * same shapes as the settings screen next door, because that is what the platform has already
+ * taught everybody how to read.
  *
- * The address is the user's to supply. Breadbin does not come with one, and it does not go looking:
- * an app carrying a pointer to a copy of somebody else's ROMs is distributing them, where one that
- * can fetch a file from an address you type is a tool you pointed somewhere.
+ * What it says has not changed. The app ships free replacement ROMs and starts on them immediately;
+ * Commodore's own are better and there are three ways to bring them in. The address is the user's
+ * to supply: an app carrying a pointer to a copy of somebody else's ROMs is distributing them,
+ * where one that fetches from an address you type is a tool you pointed somewhere.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
     val context = LocalContext.current
@@ -77,124 +84,93 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
+        var taken = 0
         var rejected: String? = null
         for (uri in uris) {
-            if (romStore.accept(uri) == null) {
+            val kinds = romStore.acceptAll(uri)
+            if (kinds.isEmpty()) {
                 rejected = uri.lastPathSegment?.substringAfterLast('/') ?: "That file"
+            } else {
+                taken += kinds.size
             }
         }
         problem = rejected?.let { Message.Resource(R.string.setup_unrecognised, it) }
+        note = if (taken > 0) Message.Resource(R.string.setup_took, taken.toString()) else null
         version++
     }
 
     val present = remember(version) { RomKind.entries.associateWith { romStore.has(it) } }
-    val complete = present.values.all { it }
+    val complete = present.filterKeys { it.required }.values.all { it }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.setup_title),
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Spacer(Modifier.height(16.dp))
-        Text(stringResource(R.string.setup_explanation), style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = stringResource(R.string.setup_limit),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onReady, modifier = Modifier.fillMaxWidth()) {
-            // Only offer the free ones when they are what would actually be used: with Commodore's
-            // three already here this button starts on those, and saying otherwise would be a lie.
-            Text(stringResource(if (complete) R.string.setup_start else R.string.setup_start_free))
-        }
-
-        Spacer(Modifier.height(32.dp))
-        Text(
-            text = stringResource(R.string.settings_replace_roms),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.setup_where),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Spacer(Modifier.height(12.dp))
-        TextButton(onClick = {
-            try {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(RomStore.WHERE_TO_GET_ROMS))
-                )
-            } catch (_: ActivityNotFoundException) {
-                problem = Message.Resource(R.string.setup_no_browser)
-            }
-        }) {
-            Icon(Icons.Filled.OpenInNew, null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.setup_open_vice))
-        }
-
-        TextButton(onClick = {
-            problem = null
-            showDownload = true
-        }) {
-            Icon(Icons.Filled.Download, null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.setup_download))
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                RomRow(stringResource(R.string.setup_basic), present[RomKind.BASIC] == true)
-                RomRow(stringResource(R.string.setup_kernal), present[RomKind.KERNAL] == true)
-                RomRow(stringResource(R.string.setup_character), present[RomKind.CHARACTER] == true)
-                // The drive's own ROM is a different computer's, and nothing needs it: disks load
-                // without it. What it buys is fast loaders, which are programs for the drive's
-                // processor and so need there to be one.
-                RomRow(stringResource(R.string.setup_drive), present[RomKind.DRIVE] == true)
-            }
-        }
-
-        problem?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = it.resolve(),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-        OutlinedButton(
-            onClick = { picker.launch(arrayOf("*/*")) },
-            modifier = Modifier.fillMaxWidth(),
+    Scaffold(
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.setup_title)) }) },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState()),
         ) {
-            Text(stringResource(R.string.setup_pick))
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.setup_pick_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+            Body(stringResource(R.string.setup_explanation))
+            Body(stringResource(R.string.setup_limit))
 
-        note?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it.resolve(), style = MaterialTheme.typography.bodyMedium)
-        }
+            Button(
+                onClick = onReady,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                // Only offer the free ones when they are what would actually be used: with
+                // Commodore's three already here this starts on those, and saying otherwise is a lie.
+                Text(stringResource(if (complete) R.string.setup_start else R.string.setup_start_free))
+            }
 
-        Spacer(Modifier.height(24.dp))
+            Section(stringResource(R.string.setup_section_roms))
+            RomRow(stringResource(R.string.setup_basic), present[RomKind.BASIC] == true)
+            RomRow(stringResource(R.string.setup_kernal), present[RomKind.KERNAL] == true)
+            RomRow(stringResource(R.string.setup_character), present[RomKind.CHARACTER] == true)
+            // The drive's own ROM is a different computer's, and nothing needs it: disks load
+            // without it. What it buys is fast loaders, which are programs for the drive's own
+            // processor and so need there to be one.
+            RomRow(stringResource(R.string.setup_drive), present[RomKind.DRIVE] == true)
+
+            Section(stringResource(R.string.setup_section_add))
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setup_pick)) },
+                supportingContent = { Text(stringResource(R.string.setup_pick_hint)) },
+                leadingContent = { Icon(Icons.Filled.FolderOpen, null) },
+                modifier = Modifier.clickable { picker.launch(arrayOf("*/*")) },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setup_download)) },
+                supportingContent = { Text(stringResource(R.string.setup_download_hint_short)) },
+                leadingContent = { Icon(Icons.Filled.Download, null) },
+                modifier = Modifier.clickable {
+                    problem = null
+                    showDownload = true
+                },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setup_open_vice)) },
+                supportingContent = { Text(stringResource(R.string.setup_where)) },
+                leadingContent = { Icon(Icons.Filled.OpenInNew, null) },
+                modifier = Modifier.clickable {
+                    try {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(RomStore.WHERE_TO_GET_ROMS))
+                        )
+                    } catch (_: ActivityNotFoundException) {
+                        problem = Message.Resource(R.string.setup_no_browser)
+                    }
+                },
+            )
+
+            problem?.let {
+                Body(it.resolve(), MaterialTheme.colorScheme.error)
+            }
+            note?.let { Body(it.resolve()) }
+            Spacer(Modifier.height(24.dp))
+        }
     }
 
     if (showDownload) {
@@ -205,8 +181,7 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
                 Column {
                     Text(
                         text = stringResource(R.string.setup_download_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
@@ -264,11 +239,33 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
             },
             dismissButton = {
                 TextButton(enabled = !fetching, onClick = { showDownload = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.setup_cancel))
                 }
             },
         )
     }
+}
+
+/** Prose between the sections, at the same inset as the list rows. */
+@Composable
+private fun Body(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = color,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun Section(title: String) {
+    HorizontalDivider()
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+    )
 }
 
 /**
@@ -288,18 +285,17 @@ private fun Message.resolve(): String = when (this) {
 
 @Composable
 private fun RomRow(label: String, present: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = if (present) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-            contentDescription = null,
-            tint = if (present) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text(
-            text = stringResource(if (present) R.string.setup_loaded else R.string.setup_missing),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+    ListItem(
+        headlineContent = { Text(label) },
+        leadingContent = {
+            Icon(
+                imageVector = if (present) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                contentDescription = null,
+                tint = if (present) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+            )
+        },
+        trailingContent = {
+            Text(stringResource(if (present) R.string.setup_loaded else R.string.setup_missing))
+        },
+    )
 }

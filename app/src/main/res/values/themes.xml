@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+        Deliberately almost empty. The bars are drawn by the system and coloured by Compose through
+        enableEdgeToEdge, and the only thing worth saying here is what the window looks like in the
+        moment before the first frame.
+    -->
     <style name="Theme.Breadbin" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">@color/breadbin_blue</item>
-        <item name="android:navigationBarColor">@color/breadbin_blue</item>
-        <item name="android:windowBackground">@color/breadbin_blue</item>
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
 </resources>
