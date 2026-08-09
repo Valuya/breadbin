@@ -232,7 +232,8 @@ class EmulatorSession(
             }.getOrElse { "Could not read the cartridge" }
 
             MediaKind.PROGRAM -> runCatching {
-                if (autostart) machine.enqueue(Program.fromPrg(bytes, item.title))
+                // The program goes in either way; the setting only decides whether it is started.
+                machine.enqueue(Program.of(bytes, item.title), run = autostart)
                 null
             }.getOrElse { "Could not read the program" }
 
@@ -241,7 +242,7 @@ class EmulatorSession(
                 if (entries.isEmpty()) {
                     "That archive is empty"
                 } else {
-                    if (autostart) machine.enqueue(entries.first())
+                    machine.enqueue(entries.first(), run = autostart)
                     null
                 }
             }
@@ -254,7 +255,7 @@ class EmulatorSession(
     fun archiveEntries(item: MediaItem): List<Program> =
         runCatching { T64.entries(item.bytes) }.getOrDefault(emptyList())
 
-    fun run(program: Program) = machine.enqueue(program)
+    fun run(program: Program, autostart: Boolean = true) = machine.enqueue(program, run = autostart)
 
     val tape get() = machine.datasette
 

@@ -16,6 +16,33 @@ class Program(val loadAddress: Int, val data: IntArray, val name: String) {
     companion object {
         const val BASIC_START = 0x0801
 
+        /** The PC64 header a .p00 wraps its program in: a signature, a name, and two spare bytes. */
+        private const val P00_HEADER = 26
+        private const val P00_SIGNATURE = "C64File"
+
+        /**
+         * Reads whichever of the two shapes a single program arrives in. A .p00 is a .prg with a
+         * PC64 header glued to the front, and mistaking one for the other reads the signature as a
+         * load address and the rest of the header as instructions.
+         */
+        fun of(bytes: ByteArray, name: String = ""): Program {
+            if (!isP00(bytes)) return fromPrg(bytes, name)
+            // The header carries the name the file had on the C64, which is better than the one the
+            // PC's filesystem gave it.
+            val embedded = IntArray(16) { bytes[8 + it].toInt() and 0xFF }
+                .takeWhile { it != 0 }
+                .toIntArray()
+            return fromPrg(
+                bytes.copyOfRange(P00_HEADER, bytes.size),
+                Petscii.toAscii(embedded).trim().ifBlank { name },
+            )
+        }
+
+        fun isP00(bytes: ByteArray): Boolean =
+            bytes.size > P00_HEADER &&
+                String(bytes, 0, P00_SIGNATURE.length, Charsets.US_ASCII) == P00_SIGNATURE &&
+                bytes[7].toInt() == 0
+
         fun fromPrg(bytes: ByteArray, name: String = ""): Program {
             require(bytes.size >= 2) { "a .prg is at least a load address" }
             val loadAddress = (bytes[0].toInt() and 0xFF) or ((bytes[1].toInt() and 0xFF) shl 8)
@@ -34,8 +61,11 @@ class Program(val loadAddress: Int, val data: IntArray, val name: String) {
  */
 object T64 {
 
+    // A .p00 also starts "C64", so it has to be ruled out before the three bytes are believed.
     fun isT64(bytes: ByteArray): Boolean =
-        bytes.size > 64 && String(bytes, 0, 3, Charsets.US_ASCII) == "C64"
+        bytes.size > 64 &&
+            String(bytes, 0, 3, Charsets.US_ASCII) == "C64" &&
+            !Program.isP00(bytes)
 
     fun entries(bytes: ByteArray): List<Program> {
         if (!isT64(bytes)) return emptyList()
@@ -92,6 +122,7 @@ object Media {
         return when {
             TapImage.isTap(bytes) -> MediaKind.TAPE
             be.valuya.breadbin.engine.cart.CrtImage.isCrt(bytes) -> MediaKind.CARTRIDGE
+            Program.isP00(bytes) -> MediaKind.PROGRAM
             T64.isT64(bytes) -> MediaKind.ARCHIVE
             extension == "d64" || bytes.size in setOf(174_848, 175_531, 196_608, 197_376) -> MediaKind.DISK
             extension == "prg" || extension == "p00" -> MediaKind.PROGRAM

@@ -54,6 +54,7 @@ import be.valuya.breadbin.data.MediaLibrary
 import be.valuya.breadbin.data.RomStore
 import be.valuya.breadbin.data.Settings
 import be.valuya.breadbin.emu.EmulatorSession
+import be.valuya.breadbin.emu.SessionHolder
 import be.valuya.breadbin.engine.tape.MediaKind
 import be.valuya.breadbin.engine.tape.Program
 
@@ -70,6 +71,7 @@ fun EmulatorScreen(
     library: MediaLibrary,
     romStore: RomStore,
     settings: Settings,
+    holder: SessionHolder,
     onSettings: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -81,10 +83,13 @@ fun EmulatorScreen(
         return
     }
 
-    // The session outlives a settings change so that turning the sound off does not restart the
-    // game; only the things the machine is built from can force a new one.
-    val session = remember(roms, settings.model, item?.file?.path) {
-        EmulatorSession(roms, settings) { bytes -> item?.let { library.save(it, bytes) } }
+    // The session comes from the holder, which lives above the navigation graph, so that opening
+    // the settings and coming back finds the same machine still running. Only the things the
+    // machine is built from are in the key; changing the sound or the joystick size is not one.
+    val session = remember(settings.model, item?.file?.path) {
+        holder.obtain(settings.model.name + ":" + item?.file?.path) {
+            EmulatorSession(roms, settings) { bytes -> item?.let { library.save(it, bytes) } }
+        }
     }
 
     var showKeyboard by remember { mutableStateOf(false) }
@@ -95,9 +100,14 @@ fun EmulatorScreen(
     var notice by remember { mutableStateOf<String?>(null) }
     var port by remember { mutableStateOf(settings.joystickPort) }
 
+    // The holder starts and stops the machine; this screen only decides whether it is running,
+    // so that a machine nobody is looking at is not burning battery.
     DisposableEffect(session) {
-        session.start()
-        onDispose { session.stop() }
+        session.paused = false
+        onDispose {
+            session.releaseAllKeys()
+            session.paused = true
+        }
     }
 
     LaunchedEffect(session, settings.sound) { session.setSound(settings.sound) }
@@ -182,7 +192,12 @@ fun EmulatorScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.Filled.ArrowBack, stringResource(R.string.emulator_back), tint = Color.White)
             }
-            IconButton(onClick = { showKeyboard = !showKeyboard }) {
+            IconButton(onClick = {
+                showKeyboard = !showKeyboard
+                // A latched SHIFT survives the keyboard going away otherwise, and every key the
+                // game reads afterwards comes back shifted.
+                if (!showKeyboard) session.releaseAllKeys()
+            }) {
                 Icon(
                     Icons.Filled.Keyboard,
                     stringResource(R.string.emulator_keyboard),
@@ -275,7 +290,7 @@ fun EmulatorScreen(
     if (archive.isNotEmpty()) {
         ArchiveDialog(
             programs = archive,
-            onPick = { session.run(it); archive = emptyList() },
+            onPick = { session.run(it, settings.autostart); archive = emptyList() },
             onDismiss = { archive = emptyList() },
         )
     }

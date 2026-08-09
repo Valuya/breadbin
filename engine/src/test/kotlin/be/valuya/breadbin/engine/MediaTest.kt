@@ -100,6 +100,24 @@ class MediaTest {
     }
 
     @Test
+    fun `a p00 is unwrapped rather than read as a program`() {
+        val file = ByteArray(26 + 4)
+        "C64File".toByteArray(Charsets.US_ASCII).copyInto(file)
+        file[7] = 0
+        "GAME".toByteArray(Charsets.US_ASCII).copyInto(file, 8)
+        file[26] = 0x01; file[27] = 0x08 // the load address of the program inside
+        file[28] = 0x11; file[29] = 0x22
+
+        assertEquals(MediaKind.PROGRAM, Media.identify(file, "game.p00"))
+        val program = Program.of(file, "ignored")
+        assertEquals(0x0801, program.loadAddress)
+        assertEquals(listOf(0x11, 0x22), program.data.toList())
+        assertEquals("GAME", program.name)
+        // Read as a bare .prg the signature would have become the load address.
+        assertTrue(Program.fromPrg(file).loadAddress != 0x0801)
+    }
+
+    @Test
     fun `a prg is a load address and then the program`() {
         val program = Program.fromPrg(byteArrayOf(0x01, 0x08, 0x11, 0x22))
         assertEquals(0x0801, program.loadAddress)

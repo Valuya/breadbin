@@ -2,6 +2,7 @@ package be.valuya.breadbin.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -16,6 +17,7 @@ import be.valuya.breadbin.data.MediaLibrary
 import be.valuya.breadbin.data.RomStore
 import be.valuya.breadbin.data.Settings
 import be.valuya.breadbin.data.SettingsRepository
+import be.valuya.breadbin.emu.SessionHolder
 import be.valuya.breadbin.ui.emulator.EmulatorScreen
 import be.valuya.breadbin.ui.library.LibraryScreen
 import be.valuya.breadbin.ui.settings.SettingsScreen
@@ -40,16 +42,24 @@ fun BreadbinApp(
     val settings by settingsRepository.settings.collectAsState(initial = Settings())
     val scope = rememberCoroutineScope()
 
-    // Which file is loaded is app state rather than screen state: it survives going to settings
-    // and coming back, which is the point of having settings reachable from a running machine.
     var romsPresent by remember { mutableStateOf(romStore.complete) }
 
-    // A file opened from outside the app is added to the library and started.
+    // The running machine lives here rather than in the emulator screen, so that going to the
+    // settings and back does not restart the game.
+    val sessionHolder = remember { SessionHolder() }
+    DisposableEffect(sessionHolder) {
+        onDispose { sessionHolder.stop() }
+    }
+
+    // A file opened from outside the app is added to the library and started. If the ROMs are not
+    // in place yet the file is kept, not dropped: this runs again once setup has finished, and the
+    // user gets the thing they actually tapped on.
     LaunchedEffect(opened, romsPresent) {
         val uri = opened ?: return@LaunchedEffect
-        onOpenedHandled()
         if (!romsPresent) return@LaunchedEffect
+        onOpenedHandled()
         val item = library.add(uri) ?: return@LaunchedEffect
+        sessionHolder.stop()
         navController.navigate("$EMULATOR/${encode(item.file.name)}")
     }
 
@@ -72,7 +82,9 @@ fun BreadbinApp(
         composable(LIBRARY) {
             LibraryScreen(
                 library = library,
-                onOpen = { item -> navController.navigate("$EMULATOR/${encode(item.file.name)}") },
+                onOpen = { item ->
+                    navController.navigate("$EMULATOR/${encode(item.file.name)}")
+                },
                 onBasic = { navController.navigate("$EMULATOR/-") },
                 onSettings = { navController.navigate(SETTINGS) },
             )
@@ -99,8 +111,13 @@ fun BreadbinApp(
                 library = library,
                 romStore = romStore,
                 settings = settings,
+                holder = sessionHolder,
                 onSettings = { navController.navigate(SETTINGS) },
-                onBack = { navController.popBackStack(LIBRARY, inclusive = false) },
+                onBack = {
+                    // Leaving for the library is the one thing that really does end the machine.
+                    sessionHolder.stop()
+                    navController.popBackStack(LIBRARY, inclusive = false)
+                },
             )
         }
     }

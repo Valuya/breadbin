@@ -77,6 +77,7 @@ class Machine(
     private var framesUntilKeystrokes = 0
     private var framesSinceReset = 0
     private var pendingProgram: Program? = null
+    private var pendingRun = true
 
     /** True when the virtual drive could be patched into this KERNAL. */
     var virtualDriveAvailable = false
@@ -129,7 +130,7 @@ class Machine(
     fun runFrame() {
         framesSinceReset++
         if (framesSinceReset == BOOT_FRAMES) {
-            pendingProgram?.let { autostart(it) }
+            pendingProgram?.let { if (pendingRun) autostart(it) else inject(it) }
             pendingProgram = null
         }
         deliverKeystrokes()
@@ -233,9 +234,17 @@ class Machine(
      * Queues a program to be injected once the machine has finished starting up. Injecting one
      * before that is pointless: the KERNAL's memory test writes over everything on its way to the
      * READY prompt.
+     *
+     * With [run] false the program is put in memory and left there, so that it can be listed or
+     * started by hand — which is what somebody who turned the automatic start off asked for.
      */
-    fun enqueue(program: Program) {
-        if (booted) autostart(program) else pendingProgram = program
+    fun enqueue(program: Program, run: Boolean = true) {
+        if (booted) {
+            if (run) autostart(program) else inject(program)
+            return
+        }
+        pendingProgram = program
+        pendingRun = run
     }
 
     /** Loads the first program from the disk in drive 8 the way a person would. */
