@@ -31,6 +31,7 @@ class SettingsRepository(private val context: Context) {
             opacity = preferences[OPACITY] ?: 0.5f,
             autostart = preferences[AUTOSTART] ?: true,
             joystickPort = preferences[PORT] ?: 2,
+            welcomed = preferences[WELCOMED] ?: false,
         )
     }
 
@@ -44,6 +45,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setOpacity(value: Float) = put { it[OPACITY] = value }
     suspend fun setAutostart(value: Boolean) = put { it[AUTOSTART] = value }
     suspend fun setJoystickPort(value: Int) = put { it[PORT] = value }
+    suspend fun setWelcomed(value: Boolean) = put { it[WELCOMED] = value }
 
     private suspend fun put(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.settingsStore.edit(block)
@@ -60,5 +62,6 @@ class SettingsRepository(private val context: Context) {
         val OPACITY = floatPreferencesKey("opacity")
         val AUTOSTART = booleanPreferencesKey("autostart")
         val PORT = intPreferencesKey("joystickPort")
+        val WELCOMED = booleanPreferencesKey("welcomed")
     }
 }

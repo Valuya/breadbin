@@ -18,6 +18,7 @@ import be.valuya.breadbin.data.RomStore
 import be.valuya.breadbin.data.Settings
 import be.valuya.breadbin.data.SettingsRepository
 import be.valuya.breadbin.emu.SessionHolder
+import kotlinx.coroutines.launch
 import be.valuya.breadbin.ui.emulator.EmulatorScreen
 import be.valuya.breadbin.ui.library.LibraryScreen
 import be.valuya.breadbin.ui.settings.SettingsScreen
@@ -42,7 +43,13 @@ fun BreadbinApp(
     val settings by settingsRepository.settings.collectAsState(initial = Settings())
     val scope = rememberCoroutineScope()
 
-    var romsPresent by remember { mutableStateOf(romStore.complete) }
+    // There are always ROMs now: the free ones ship with the app. What varies is whether the user
+    // has read the explanation of what they cost.
+    var welcomed by remember(settings.welcomed) { mutableStateOf(settings.welcomed) }
+
+    // Which ROM set is in use has to be state rather than a lookup, or the settings screen goes on
+    // reporting the old answer after the user has changed it.
+    var romSource by remember { mutableStateOf(romStore.source) }
 
     // The running machine lives here rather than in the emulator screen, so that going to the
     // settings and back does not restart the game.
@@ -54,9 +61,8 @@ fun BreadbinApp(
     // A file opened from outside the app is added to the library and started. If the ROMs are not
     // in place yet the file is kept, not dropped: this runs again once setup has finished, and the
     // user gets the thing they actually tapped on.
-    LaunchedEffect(opened, romsPresent) {
+    LaunchedEffect(opened) {
         val uri = opened ?: return@LaunchedEffect
-        if (!romsPresent) return@LaunchedEffect
         onOpenedHandled()
         val item = library.add(uri) ?: return@LaunchedEffect
         sessionHolder.stop()
@@ -65,15 +71,19 @@ fun BreadbinApp(
 
     NavHost(
         navController = navController,
-        startDestination = if (romsPresent) LIBRARY else SETUP,
+        startDestination = if (welcomed) LIBRARY else SETUP,
     ) {
         composable(SETUP) {
             SetupScreen(
                 romStore = romStore,
                 onReady = {
-                    romsPresent = true
+                    welcomed = true
+                    romSource = romStore.source
+                    scope.launch { settingsRepository.setWelcomed(true) }
+                    // Clear the stack rather than just this screen: reached from the settings, the
+                    // settings are still underneath, and Back from the library would reopen them.
                     navController.navigate(LIBRARY) {
-                        popUpTo(SETUP) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 },
             )
@@ -95,10 +105,15 @@ fun BreadbinApp(
                 settings = settings,
                 repository = settingsRepository,
                 scope = scope,
-                onReplaceRoms = {
+                romSource = romSource,
+                onManageRoms = {
+                    sessionHolder.stop()
+                    navController.navigate(SETUP)
+                },
+                onUseFreeRoms = {
                     romStore.clear()
-                    romsPresent = false
-                    navController.navigate(SETUP) { popUpTo(LIBRARY) { inclusive = true } }
+                    romSource = romStore.source
+                    sessionHolder.stop()
                 },
                 onBack = { navController.popBackStack() },
             )
