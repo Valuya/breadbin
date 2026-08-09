@@ -93,6 +93,48 @@ class KeyboardTest {
         for (row in 0 until 8) assertEquals("row $row", 0xFF, scan(row))
     }
 
+    /**
+     * Port two, which is the one games use, and the one nothing here tested until a game would not
+     * start. It reads on port A, through the same handler as the keyboard rows.
+     */
+    @Test
+    fun `a joystick in port two pulls its lines low on port A`() {
+        // What a game does before reading it: stop driving port A, so the stick is all that is
+        // pulling on it.
+        cia.write(0x02, 0x00)
+        cia.write(0x03, 0xFF)
+        cia.write(0x01, 0xFF) // no keyboard column held down
+
+        assertEquals("an idle stick is not holding anything", 0xFF, cia.read(0x00))
+
+        keyboard.setJoystick(JoystickPort.TWO, up = false, down = false, left = false, right = false, fire = true)
+        assertEquals("fire is bit 4, active low", 0xFF and 0x10.inv(), cia.read(0x00))
+
+        keyboard.setJoystick(JoystickPort.TWO, up = true, down = false, left = false, right = false, fire = false)
+        assertEquals("up is bit 0", 0xFF and 0x01.inv(), cia.read(0x00))
+
+        keyboard.setJoystick(JoystickPort.TWO, up = false, down = false, left = false, right = true, fire = true)
+        assertEquals("right and fire together", 0xFF and 0x08.inv() and 0x10.inv(), cia.read(0x00))
+    }
+
+    /** The other thing a game does: leave port A driving high and read it anyway. */
+    @Test
+    fun `port two still reads with the port driven high`() {
+        cia.write(0x02, 0xFF)
+        cia.write(0x00, 0xFF)
+        keyboard.setJoystick(JoystickPort.TWO, up = false, down = false, left = false, right = false, fire = true)
+        assertEquals(0xFF and 0x10.inv(), cia.read(0x00))
+    }
+
+    @Test
+    fun `the two sticks do not read each other`() {
+        cia.write(0x02, 0x00)
+        cia.write(0x03, 0xFF)
+        cia.write(0x01, 0xFF)
+        keyboard.setJoystick(JoystickPort.ONE, up = false, down = false, left = false, right = false, fire = true)
+        assertEquals("port one showed up on port A", 0xFF, cia.read(0x00))
+    }
+
     @Test
     fun `a joystick in port one pulls its direction low on port B`() {
         keyboard.setJoystick(JoystickPort.ONE, up = false, down = false, left = false, right = true, fire = true)

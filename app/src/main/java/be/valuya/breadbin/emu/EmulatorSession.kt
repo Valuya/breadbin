@@ -86,6 +86,17 @@ class EmulatorSession(
     /** What is in the drive, if anything, so that writes can be saved back. */
     private var mountedDisk: D64? = null
 
+    /**
+     * What has already been put into this machine.
+     *
+     * The screen opens its media from an effect, and an effect runs again every time the screen
+     * comes back — from the settings, from a rotation, from anything. Without this, going to the
+     * settings and back re-mounted the disk and typed LOAD and RUN into a game that was already
+     * running, which does to a C64 exactly what it sounds like.
+     */
+    var openedPath: String? = null
+        private set
+
     private var thread: Thread? = null
     private var lastPublish = 0L
 
@@ -242,6 +253,7 @@ class EmulatorSession(
     fun reset() = machine.reset()
 
     fun resetAndUnplug() {
+        openedPath = null
         machine.insertCartridge(null)
         machine.insertDisk(null)
         machine.insertTape(null)
@@ -253,6 +265,7 @@ class EmulatorSession(
 
     /** Puts something in the machine. Returns a note for the user, or null if all is well. */
     fun open(item: MediaItem, autostart: Boolean): String? {
+        openedPath = item.file.path
         val bytes = runCatching { item.bytes }.getOrElse { return "Could not read ${item.title}" }
         return when (item.kind) {
             MediaKind.DISK -> runCatching {
@@ -292,6 +305,11 @@ class EmulatorSession(
 
             MediaKind.UNKNOWN -> "Breadbin does not know what ${item.title} is"
         }
+    }
+
+    /** Notes that something was put in by hand, so the screen does not put it in again. */
+    fun markOpened(path: String) {
+        openedPath = path
     }
 
     /** The programs inside a .t64, so that the user can pick one. */

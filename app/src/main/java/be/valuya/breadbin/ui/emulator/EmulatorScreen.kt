@@ -127,9 +127,13 @@ fun EmulatorScreen(
             return@LaunchedEffect
         }
         if (item == null) return@LaunchedEffect
+        // Once per machine, not once per composition. Coming back from the settings must not put
+        // the disk in again and type LOAD over the top of whatever is running.
+        if (session.openedPath == item.file.path) return@LaunchedEffect
         if (item.kind == MediaKind.ARCHIVE) {
             val entries = session.archiveEntries(item)
             if (entries.size > 1) {
+                session.markOpened(item.file.path)
                 archive = entries
                 return@LaunchedEffect
             }
