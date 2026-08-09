@@ -143,8 +143,18 @@ class Voice {
         return value
     }
 
-    /** The voice's contribution to the mix, centred on zero. */
-    fun output(source: Voice): Double = (waveformOutput(source) - 0x800).toDouble() * envelope
+    /**
+     * The voice's contribution to the mix, centred on zero.
+     *
+     * A waveform runs from 0 to $fff, so the middle of it has to come off before it is worth
+     * anything as a signal — but only when there is a waveform at all. Selecting none is a silent
+     * voice, and subtracting the centre from a silence turns it into a large constant offset that
+     * moves with the envelope: a thump on every note, from a voice that is not playing one.
+     */
+    fun output(source: Voice): Double {
+        if ((control shr 4) and 0x0F == 0) return 0.0
+        return (waveformOutput(source) - 0x800).toDouble() * envelope
+    }
 
     private fun triangle(source: Voice): Int {
         // Ring modulation replaces this oscillator's own sign bit with the exclusive-or of the two,
