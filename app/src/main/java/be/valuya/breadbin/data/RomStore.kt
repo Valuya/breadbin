@@ -35,6 +35,9 @@ class RomStore(private val context: Context) {
 
     private fun fileFor(kind: RomKind) = File(directory, "${kind.name.lowercase()}.rom")
 
+    /** Where the name of the file it came from is kept, so the user can see what they gave us. */
+    private fun labelFor(kind: RomKind) = File(directory, "${kind.name.lowercase()}.from")
+
     fun has(kind: RomKind) = fileFor(kind).length() == kind.size.toLong()
 
     /** True when the user has supplied all three of the ROMs the machine itself needs. */
@@ -64,19 +67,38 @@ class RomStore(private val context: Context) {
                 val kind = Roms.identify(entry.bytes) ?: continue
                 // A set usually holds several revisions of the same ROM. Later ones win, which for
                 // an alphabetically ordered archive means the newest revision of each.
-                accept(entry.bytes, kind)
+                accept(entry.bytes, kind, entry.fileName)
                 taken += kind
             }
             return taken
         }
         val kind = Roms.identify(bytes) ?: return emptyList()
-        accept(bytes, kind)
+        accept(bytes, kind, uri.lastPathSegment?.substringAfterLast('/'))
         return listOf(kind)
     }
 
     /** Stores bytes that have already been identified, whatever they arrived by. */
-    fun accept(bytes: ByteArray, kind: RomKind) {
+    fun accept(bytes: ByteArray, kind: RomKind, from: String? = null) {
         fileFor(kind).writeBytes(bytes)
+        if (from != null) labelFor(kind).writeText(from) else labelFor(kind).delete()
+    }
+
+    /**
+     * What is actually loaded for a kind, in words: which revision where the ROM says so, a
+     * checksum where it does not, and the name of the file it came out of.
+     *
+     * This exists because "it does not work" and "you are running a different KERNAL than you
+     * think" are indistinguishable from the outside, and the second one is common.
+     */
+    fun describe(kind: RomKind): String? {
+        if (!has(kind)) {
+            if (kind == RomKind.DRIVE) return null
+            val bundled = runCatching { asset(BUNDLED_FILES.getValue(kind)) }.getOrNull() ?: return null
+            return "Open ROMs (bundled) · " + Roms.describe(kind, bundled)
+        }
+        val bytes = runCatching { fileFor(kind).readBytes() }.getOrNull() ?: return null
+        val from = runCatching { labelFor(kind).readText() }.getOrNull()
+        return Roms.describe(kind, bytes) + (from?.let { " · $it" } ?: "")
     }
 
     /** The ROMs to run: Commodore's if they are all here, otherwise the free ones. */
@@ -102,9 +124,9 @@ class RomStore(private val context: Context) {
 
     fun loadBundled(): Roms? = runCatching {
         Roms.of(
-            basic = asset("basic.rom"),
-            kernal = asset("kernal.rom"),
-            character = asset("chargen.rom"),
+            basic = asset(BUNDLED_FILES.getValue(RomKind.BASIC)),
+            kernal = asset(BUNDLED_FILES.getValue(RomKind.KERNAL)),
+            character = asset(BUNDLED_FILES.getValue(RomKind.CHARACTER)),
         )
     }.getOrNull()
 
@@ -113,11 +135,20 @@ class RomStore(private val context: Context) {
 
     /** Throws away Commodore's ROMs and falls back to the free ones. */
     fun clear() {
-        for (kind in RomKind.entries) fileFor(kind).delete()
+        for (kind in RomKind.entries) {
+            fileFor(kind).delete()
+            labelFor(kind).delete()
+        }
     }
 
     companion object {
         private const val BUNDLED_DIRECTORY = "openroms"
+
+        private val BUNDLED_FILES = mapOf(
+            RomKind.BASIC to "basic.rom",
+            RomKind.KERNAL to "kernal.rom",
+            RomKind.CHARACTER to "chargen.rom",
+        )
 
         /**
          * Where to send somebody who wants Commodore's ROMs. VICE is the desktop emulator, and it

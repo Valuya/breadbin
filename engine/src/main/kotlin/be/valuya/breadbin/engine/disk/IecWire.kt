@@ -190,7 +190,18 @@ class IecWire(private val iec: Iec, private val bus: IecBus) {
      * so far is worth nothing: this gives up and returns null so the caller can start again.
      */
     private suspend fun kotlin.sequences.SequenceScope<Unit>.receive(underAttention: Boolean): Int? {
-        // We are holding DATA down. The talker releasing CLK means it is ready to send.
+        // First, wait for the talker to have hold of the clock at all.
+        //
+        // A released clock means "a byte is ready" — but it also means "nothing has started yet",
+        // and the two are the same line at the same level. The computer asserts attention a couple
+        // of dozen cycles before it takes hold of the clock, so a device that answers attention and
+        // looks straight at the clock sees it released, decides a byte is coming, and is a whole
+        // handshake ahead of the computer for the rest of the transaction. Between bytes the talker
+        // is already holding it, so this costs nothing after the first.
+        untilOr(TAKING_HOLD) { bus.clock || bus.atn != underAttention }
+        if (bus.atn != underAttention) return null
+
+        // Now the release means what it says.
         until { !bus.clock || bus.atn != underAttention }
         if (bus.atn != underAttention) return null
         pullData(false)
@@ -304,8 +315,24 @@ class IecWire(private val iec: Iec, private val bus: IecBus) {
         /** How long "there is a byte ready" is held, which has to outlast a listener's poll loop. */
         const val READY_HOLD = 100
 
-        /** How long the gap before the last byte is, which has to outlast the listener's patience. */
-        const val END_OF_FILE = 400
+        /**
+         * How long to give the talker to take hold of the clock before giving up on it. Commodore's
+         * KERNAL takes a couple of dozen cycles over it; this is generous, and bounded only so that
+         * a computer which does something else entirely cannot wedge the drive for ever.
+         */
+        const val TAKING_HOLD = 2000
+
+        /**
+         * How long the gap before the last byte is.
+         *
+         * This is the whole of how the end of a file is announced, and it works by outlasting the
+         * listener's patience — so it has to be longer than however long that is. Commodore's
+         * KERNAL times it with a CIA counting somewhere between two and five hundred cycles, which
+         * a four-hundred-cycle gap loses to about half the time; the symptom is a load that
+         * transfers every byte correctly and then hangs asking for one more. Milliseconds are free
+         * here, since this happens once per file.
+         */
+        const val END_OF_FILE = 4000
 
         /**
          * How long a bit is held before, and then during, the clock edge that reads it.
