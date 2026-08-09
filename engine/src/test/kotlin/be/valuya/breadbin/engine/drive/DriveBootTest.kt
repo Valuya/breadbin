@@ -66,76 +66,59 @@ class DriveBootTest {
 
     private fun disk(): D64 {
         val disk = D64.blank(Petscii.fromAscii("REAL DRIVE"), Petscii.fromAscii("01"))
-        disk.writeFile(Petscii.fromAscii("HELLO"), basicPrint("OFF THE DISK"), 2, replace = false)
+        disk.writeFile(Petscii.fromAscii("HELLO"), programFile("OFF THE DISK"), 2, replace = false)
         disk.writeFile(Petscii.fromAscii("SECOND"), IntArray(300) { 0x42 }, 2, replace = false)
         return disk
     }
 
     /**
-     * What the drive already does: boot its own DOS, spin the disk up, seek to the directory track
-     * and pull bytes off the surface at the rate the surface goes past.
+     * A program as it sits in a disk file: the two-byte load address first, then the bytes. Leaving
+     * it off does not fail loudly — LOAD without a secondary address puts the file at the start of
+     * BASIC whatever it says, so the first two bytes get eaten as an address that is then thrown
+     * away, and everything after them lands two bytes early.
+     */
+    private fun programFile(text: String): IntArray = intArrayOf(0x01, 0x08) + basicPrint(text)
+
+    /**
+     * A drive on its own, with nothing asked of it.
+     *
+     * The interesting part of this is what is *not* happening. A 1541 that fails its power-on tests
+     * does not sulk quietly: it blinks its LED for ever in a loop that never touches the serial bus,
+     * and if the motor happened to be running when the test failed it goes on running. So a drive
+     * that reads its whole track over and over looks busy and productive and is in fact dead, which
+     * is exactly what an earlier version of this test asserted was working.
      */
     @Test
-    fun `the drive's own processor starts up and reads the disk`() {
+    fun `the drive powers up healthy and settles into its idle loop`() {
         val machine = machineWithDrive()
         assumeTrue("set BREADBIN_ROMS to a directory holding a C64 ROM set and a 1541 DOS", machine != null)
         val drive = machine!!.drive!!
         machine.insertDisk(disk())
 
         repeat(200) { machine.runFrame() }
-        machine.type("LOAD\"HELLO\",8\r")
-        repeat(200) { machine.runFrame() }
 
         assertTrue("the drive's processor jammed", !drive.cpu.jammed)
-        // A drive that has run its power-on tests is executing its own ROM.
         assertTrue("the drive never reached its DOS at %04X".format(drive.cpu.pc), drive.cpu.pc >= 0xC000)
-        assertTrue("the disk never span up", drive.motorRunning)
-        assertTrue("the head is on track ${'$'}{drive.track}, not the directory", drive.track == 18)
-        assertTrue("nothing came off the surface", drive.bytesRead > 100_000)
+        // An idle 1541 has stopped: motor off, LED off, and nowhere near the error blink.
+        assertTrue("the disk is still turning with nothing to do", !drive.motorRunning)
+        assertTrue("the LED is on, which a 1541 does to report a fault", !drive.ledOn)
+        assertTrue(
+            "the drive is in its power-on error loop at %04X".format(drive.cpu.pc),
+            drive.cpu.pc !in 0xEA6E..0xEA9F,
+        )
     }
 
-    /**
-     * Not yet, and worth being precise about where it stops.
-     *
-     * Attention works: the computer asserts the line, the drive's VIA raises the interrupt, the DOS
-     * services it, and a command byte arrives intact and names this drive. After that the bus goes
-     * completely still — one transition on each of the three wires and then nothing, for as long as
-     * anybody cares to watch. That is a deadlock rather than a misread: the computer is waiting for
-     * the drive to let go of the data line, and the drive has gone back to its idle loop believing
-     * the transaction is over.
-     *
-     * Which of the two is wrong is not yet established. Watching the wires cannot tell them apart,
-     * and the next thing to try is a hand-written 6502 stub on one end so that one side of the
-     * conversation is known-good and the other can be judged against it.
-     */
-    @Ignore("attention works; the byte handshake after it deadlocks")
+    /** Two whole computers, three wires, and a file at the end of it. */
     @Test
     fun `a program loads off a real 1541`() {
         val machine = machineWithDrive()
         assumeTrue(machine != null)
         machine!!.insertDisk(disk())
+        val drive = machine.drive!!
 
         repeat(200) { machine.runFrame() }
         machine.type("LOAD\"HELLO\",8\r")
-        val drive = machine.drive!!
-        val seen = sortedMapOf<Int, Int>()
-        repeat(9) {
-            repeat(100) { machine.runFrame() }
-            repeat(400) {
-                machine.cpu.step()
-                seen[drive.cpu.pc] = (seen[drive.cpu.pc] ?: 0) + 1
-            }
-            val jobs = (0 until 6).joinToString(" ") { j -> "%02X".format(drive.peek(j)) }
-            println(
-                "f%4d pc=%04X jobs=[%s] via1 ifr=%02X ier=%02X irq=%s | via2 ifr=%02X ier=%02X | atn=%s clk=%s data=%s"
-                    .format(
-                        (it + 1) * 100, drive.cpu.pc, jobs,
-                        drive.via1.flags, drive.via1.enabled, drive.via1.irq,
-                        drive.via2.flags, drive.via2.enabled,
-                        machine.serialBus.atn, machine.serialBus.clock, machine.serialBus.data,
-                    )
-            )
-        }
+        repeat(900) { machine.runFrame() }
         machine.type("RUN\r")
         repeat(200) { machine.runFrame() }
 
@@ -143,9 +126,10 @@ class DriveBootTest {
         println(text.joinToString("\n") { "|$it" })
         assertTrue("the disk never loaded:\n" + text.joinToString("\n"),
             text.any { it.contains("OFF THE DISK") })
+        // The bytes came off the surface rather than out of the image behind the drive's back.
+        assertTrue("nothing was read off the disk", drive.bytesRead > 0)
     }
 
-    @Ignore("attention works; the byte handshake after it deadlocks")
     @Test
     fun `the directory comes off the disk`() {
         val machine = machineWithDrive()

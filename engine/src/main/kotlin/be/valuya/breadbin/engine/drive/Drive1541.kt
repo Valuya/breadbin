@@ -332,10 +332,11 @@ class Drive1541(
         // and the drive's acknowledgement disagree. That gate is what lets the computer tell,
         // without asking, whether anything out there is listening.
         bus.driveData = dataOut || (acknowledge != bus.atn)
-        // CA1 sees the ATN line itself, where port B bit 7 sees it through an inverter — so the
-        // two disagree, and the DOS asks for the negative edge because that is when ATN is pulled
-        // low. Making CA1 follow bit 7 looks tidier and never fires.
-        via1.setCa1(!bus.atn)
+        // CA1 sees ATN through the same inverter port B bit 7 does, so both are high when the
+        // computer is pulling the line down. The DOS sets the control register to $01 and calls it
+        // "neg edge of atn" — which on a 6522 selects the *positive* edge, and is only consistent
+        // if what reaches the pin is already the other way up from the wire.
+        via1.setCa1(bus.atn)
     }
 
     /** Called by the machine when the computer changes the ATN line. */
