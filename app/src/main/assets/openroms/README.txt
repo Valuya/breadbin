@@ -17,8 +17,11 @@ Source, and the means to rebuild these images:
 
   https://github.com/MEGA65/open-roms
 
-They are shipped so that Breadbin works the moment it is installed. They are not
-as compatible as Commodore's own ROMs — in particular Open ROMs drives the serial
-bus itself rather than through its KERNAL routines, so disk images will not load
-under them. Supplying Commodore's three ROMs in the app's settings replaces these
-and lifts that limit.
+They are shipped so that Breadbin works the moment it is installed. Disks, tapes
+and cartridges all work under them: Breadbin's drive answers the serial bus one
+edge at a time rather than by intercepting KERNAL calls, so it does not care
+whose KERNAL is asking.
+
+They are still not as compatible as Commodore's own ROMs, which are what every
+program of the era was written against. Supplying those three in the app's
+settings replaces these.

@@ -161,8 +161,8 @@ class Drive1541(
         syncsSeen = 0
         bytesRead = 0
         stepperKnown = false
-        bus.driveClock = false
-        bus.driveData = false
+        bus.deviceClock = false
+        bus.deviceData = false
         cpu.reset()
     }
 
@@ -327,11 +327,11 @@ class Drive1541(
         val clockOut = (portB and 0x08 != 0) == OUTPUTS_INVERTED
         val acknowledge = portB and 0x10 != 0
 
-        bus.driveClock = clockOut
+        bus.deviceClock = clockOut
         // The drive also pulls DATA down automatically whenever the computer's attention request
         // and the drive's acknowledgement disagree. That gate is what lets the computer tell,
         // without asking, whether anything out there is listening.
-        bus.driveData = dataOut || (acknowledge != bus.atn)
+        bus.deviceData = dataOut || (acknowledge != bus.atn)
         // CA1 sees ATN through the same inverter port B bit 7 does, so both are high when the
         // computer is pulling the line down. The DOS sets the control register to $01 and calls it
         // "neg edge of atn" — which on a 6522 selects the *positive* edge, and is only consistent

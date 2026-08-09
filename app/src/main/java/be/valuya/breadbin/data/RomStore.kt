@@ -34,10 +34,10 @@ class RomStore(private val context: Context) {
 
     private fun fileFor(kind: RomKind) = File(directory, "${kind.name.lowercase()}.rom")
 
-    fun has(kind: RomKind) = fileFor(kind).length() == expectedSize(kind)
+    fun has(kind: RomKind) = fileFor(kind).length() == kind.size.toLong()
 
-    /** True when the user has supplied all three of Commodore's ROMs. */
-    val complete get() = RomKind.entries.all { has(it) }
+    /** True when the user has supplied all three of the ROMs the machine itself needs. */
+    val complete get() = RomKind.entries.filter { it.required }.all { has(it) }
 
     val source get() = if (complete) RomSource.SUPPLIED else RomSource.BUNDLED
 
@@ -68,6 +68,16 @@ class RomStore(private val context: Context) {
         )
     }.getOrNull()
 
+    /**
+     * The 1541's DOS, if the user supplied it. Its presence is what decides whether the drive is a
+     * real emulated 1541 or the one written in Kotlin.
+     */
+    fun loadDrive(): IntArray? = runCatching {
+        val bytes = fileFor(RomKind.DRIVE).takeIf { it.length() == RomKind.DRIVE.size.toLong() }
+            ?.readBytes() ?: return null
+        IntArray(bytes.size) { bytes[it].toInt() and 0xFF }
+    }.getOrNull()
+
     fun loadBundled(): Roms? = runCatching {
         Roms.of(
             basic = asset("basic.rom"),
@@ -82,12 +92,6 @@ class RomStore(private val context: Context) {
     /** Throws away Commodore's ROMs and falls back to the free ones. */
     fun clear() {
         for (kind in RomKind.entries) fileFor(kind).delete()
-    }
-
-    private fun expectedSize(kind: RomKind) = when (kind) {
-        RomKind.BASIC -> Roms.BASIC_SIZE.toLong()
-        RomKind.KERNAL -> Roms.KERNAL_SIZE.toLong()
-        RomKind.CHARACTER -> Roms.CHARACTER_SIZE.toLong()
     }
 
     companion object {

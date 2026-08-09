@@ -98,16 +98,17 @@ class BusTrace {
                 last = now
                 quiet = 0
                 println(
-                    "%9d atn=%s clk=%s dat=%s  c64=%04X  drive=%-14s".format(
+                    "%9d atn=%s clk=%s dat=%s | computer clk=%s dat=%s | drive clk=%s dat=%s | c64=%04X %s".format(
                         machine.cycles,
                         if (bus.atn) "L" else "-",
                         if (bus.clock) "L" else "-",
                         if (bus.data) "L" else "-",
+                        bus.computerClock, bus.computerData, bus.deviceClock, bus.deviceData,
                         machine.cpu.pc,
                         name(drive.cpu.pc),
                     )
                 )
-                if (++lines > 220) break@outer
+                if (++lines > 90) break@outer
             }
             if (quiet > 400_000) {
                 println("--- still for $quiet cycles: c64=%04X drive=%s".format(machine.cpu.pc, name(drive.cpu.pc)))

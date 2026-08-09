@@ -124,26 +124,17 @@ class BootTest {
         val roms = roms()
         assumeTrue(roms != null)
         val machine = Machine(roms!!)
-        assumeTrue("this KERNAL cannot be patched for the drive", machine.virtualDriveAvailable)
-
         // A BASIC program that prints something recognisable: 10 PRINT"IT LOADED"
-        val program = basicPrint("IT LOADED")
+        // The two-byte load address goes in front: LOAD without a secondary address puts the file
+        // at the start of BASIC whatever it claims, so leaving it off loses the first two bytes.
+        val program = intArrayOf(0x01, 0x08) + basicPrint("IT LOADED")
         val disk = D64.blank(Petscii.fromAscii("TEST"), Petscii.fromAscii("01"))
         disk.writeFile(Petscii.fromAscii("HELLO"), program, fileType = 2, replace = false)
         machine.insertDisk(disk)
 
         repeat(200) { machine.runFrame() }
         machine.type("LOAD\"HELLO\",8\r")
-        repeat(300) { machine.runFrame() }
-
-        // A KERNAL that drives the serial lines itself never calls the routines the drive is
-        // patched into, and no amount of emulating a 1541 above the KERNAL will help it.
-        assumeTrue(
-            "this KERNAL drives the serial lines itself instead of going through its own routines, " +
-                "so an emulated drive that sits above the KERNAL cannot serve it",
-            machine.iec.bytesServed > 0,
-        )
-
+        repeat(900) { machine.runFrame() }
         machine.type("RUN\r")
         repeat(200) { machine.runFrame() }
 

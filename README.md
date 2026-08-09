@@ -32,12 +32,11 @@ BASIC, the KERNAL and the character set, under the LGPL, containing none of Comm
 exact images in `app/src/main/assets/openroms/` are covered by the boot test: they reach a `READY.`
 prompt, run BASIC typed at the prompt, and load a program off a tape.
 
-**They cost you disks.** Open ROMs drives the serial bus itself rather than through the KERNAL
-routines the emulated drive answers, so `.d64` images will not load under them. Tapes, cartridges
-and BASIC all do. The app says so on the opening screen and again when you open a disk, rather than
-leaving you watching a machine that sits there searching.
+Disks, tapes and cartridges all work under them. The drive answers the serial bus one edge at a
+time rather than by intercepting KERNAL calls, so it does not care whose KERNAL is asking.
 
-**Commodore's own ROMs lift that limit.** Breadbin will take them three ways — the file picker, a
+**Commodore's own ROMs are still worth having.** They are what every program of the era was written
+against, so anything that misbehaves on the free ones is worth trying again on those. Breadbin will take them three ways — the file picker, a
 link that opens [VICE's download page](https://vice-emu.sourceforge.io/) in your browser, or an
 address you paste in for it to fetch — and works out which of the three each file is from its
 contents. If you own a C64 you can read them off it instead.
@@ -70,10 +69,17 @@ them, which is why turbo loaders work too — this emulates the tape, not the lo
 
 `.t64` archives and `.prg` files are also read, and those are injected straight into memory.
 
-**Disks.** `.d64` images, through an emulated drive that sits above the KERNAL rather than below it:
-the KERNAL's serial routines are found via its jump table and patched, and answered from the image.
-Loading is instant. Directories, wildcards, sub-directory syntax, saving, and scratching all work,
+**Disks.** `.d64` images, through a drive that answers the serial bus properly: three wires,
+wired-AND, a bit at a time, with the end of a file signalled by a silence rather than a byte. It is
+written from the protocol rather than from any one KERNAL, so it works under Commodore's ROMs and
+the free ones alike. Directories, wildcards, sub-directory syntax, saving and scratching all work,
 and a game that saves its high scores writes them back to the image file.
+
+**And a real 1541, if you have its ROM.** Supply the 16K 1541 DOS the same way as the other three
+and the drive becomes a whole second computer: its own 6502, its two 6522s, and the disk modelled as
+GCR bits going past a head at three hundred rpm. That is the only thing a fast loader can talk to,
+because a fast loader is a program that runs on the drive's processor. Nothing needs it — disks load
+without it — but nothing else will run the code a game uploads into the drive.
 
 **Cartridges.** `.crt` files, including the banked boards most games shipped on: Ocean, System 3,
 Dinamic, Magic Desk, Zaxxon, Fun Play, Super Games, Comal-80, Simons' BASIC, Final Cartridge III and
@@ -86,19 +92,17 @@ forward, and opening a file from a file manager straight into the emulator.
 
 These are real limits, not oversights:
 
-- **Fast loaders on disk.** The emulated drive answers the KERNAL's serial routines. A game that
-  bit-bangs the serial lines itself — most disk releases from about 1986, and every cracked intro —
-  is talking to a 1541 that is not there, and will sit waiting. Those need a real drive emulation,
-  with the 1541's own 6502 and DOS ROM, which this does not have. Tape and cartridge releases are
-  unaffected, and so are disk releases that load through the KERNAL.
-- **Open ROMs and disks.** The same limit, from the other side: Open ROMs drives the serial lines
-  itself rather than through its own KERNAL routines, so disks do not load under it. Tapes,
-  cartridges and everything else do.
+- **Fast loaders, without the 1541's DOS ROM.** A game that bit-bangs the serial lines itself —
+  most disk releases from about 1986, and every cracked intro — is uploading code into the drive's
+  processor and then talking to it. The drive Breadbin ships has no processor to upload into, so
+  those games sit waiting. Supplying the 1541 DOS ROM turns on the drive that does, and they work.
+  Tape and cartridge releases are unaffected either way.
 - **Save states.** Not implemented.
 - **Mid-line sprite movement.** Sprites are evaluated once per line. Sprite multiplexers — what
   games actually use — work; the handful of demo effects that move a sprite within a line do not.
-- **The 1541's own quirks.** No real drive means no drive-side timing, no GCR, no fast loaders and
-  no copy protection that reads the disk surface.
+- **Copy protection that reads the disk surface** needs the real drive, and even then a `.d64` does
+  not carry what such a scheme is looking for: it stores decoded sectors, not the flux those
+  schemes measure. A `.g64` would; Breadbin does not read one yet.
 - **The SID filter** is a state variable filter, not a model of the analogue original. Filter sweeps
   sound right. They do not sound like your particular 6581.
 
@@ -130,9 +134,16 @@ Minimum Android version: 7.0 (API 24).
   sprite-to-background collision.
 - **Badlines take the right amount of time** — between 3.5% and 7.5% of a frame, against the 5.1%
   that twenty-five badlines of forty cycles come to.
-- **The virtual drive is driven by real 6502 code** calling through the KERNAL jump table, loading a
-  file, a directory and a wildcard out of a `.d64`, and reporting FILE NOT FOUND and DEVICE NOT
-  PRESENT the way the KERNAL expects to hear them.
+- **The serial bus is tested against a computer written from the protocol**, not from the drive:
+  `IecWireTest` drives the three lines by hand, one edge at a time, and checks a file comes back
+  byte for byte, that the directory arrives as a program, that a file written over the bus is on
+  the disk afterwards, that a missing name gives back nothing and says `62,FILE NOT FOUND` on the
+  error channel, that a device that is not there stays silent, and that attention part way through
+  a transfer abandons it cleanly.
+- **The keyboard matrix is checked against the Programmer's Reference Guide** rather than against
+  the way this emulator stores it — drive a line, read a port, compare. Testing it against itself
+  was perfectly happy with the rows and columns swapped over, which is how the on-screen keyboard
+  came to do nothing at all.
 - **Disk images survive a round trip**: sector chains, the BAM, replacing a file, scratching one,
   and more files than one directory sector holds.
 
@@ -154,7 +165,14 @@ With the Open ROMs set, this repository's boot test has been seen to:
   output. The tape is generated by `TapWriter`, which writes the three pulse lengths and the two
   copies of each block exactly as a C64 wrote them.
 
-The disk half of the boot test skips under Open ROMs for the reason given above.
+- **load a program off a disk**, over the emulated serial bus: `SEARCHING FOR HELLO` →
+  `LOADING FROM $0801 TO $0814` → `READY.` → `RUN` → the program's output — under Open ROMs, with
+  no Commodore ROM involved anywhere;
+- **type on the keyboard**, through the matrix rather than the KERNAL's buffer.
+
+`DriveBootTest` needs a 16K 1541 DOS in the same directory. With one, two whole computers talk to
+each other down three wires: the drive boots its own DOS, passes its power-on self-test, seeks,
+reads GCR off the surface, and hands over a file and a directory.
 
 ## What has actually been run
 

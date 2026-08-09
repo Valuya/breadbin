@@ -18,19 +18,20 @@ class IecBus {
     var computerClock = false
     var computerData = false
 
-    // What the drive is pulling down.
-    var driveClock = false
-    var driveData = false
+    // What the drive is pulling down — whichever drive that is. A real 1541 and the one written
+    // in Kotlin both hang off these two, and only ever one of them at a time.
+    var deviceClock = false
+    var deviceData = false
 
     val atn get() = computerAtn
-    val clock get() = computerClock || driveClock
-    val data get() = computerData || driveData
+    val clock get() = computerClock || deviceClock
+    val data get() = computerData || deviceData
 
     fun reset() {
         computerAtn = false
         computerClock = false
         computerData = false
-        driveClock = false
-        driveData = false
+        deviceClock = false
+        deviceData = false
     }
 }

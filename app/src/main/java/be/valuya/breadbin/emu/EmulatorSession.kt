@@ -34,9 +34,15 @@ import java.util.concurrent.locks.LockSupport
 class EmulatorSession(
     roms: Roms,
     settings: Settings,
+    /**
+     * The 1541's own DOS, if the user has it. With it the drive is a whole second computer running
+     * that ROM, which is what a fast loader needs; without it there is still a drive, and it still
+     * loads disks — it just cannot have somebody else's code uploaded into it.
+     */
+    driveRom: IntArray? = null,
     private val onDiskWritten: (ByteArray) -> Unit = {},
 ) {
-    val machine = Machine(roms, settings.model, SAMPLE_RATE)
+    val machine = Machine(roms, settings.model, SAMPLE_RATE, driveRom)
 
     private val width = settings.model.width
     private val height = settings.model.height

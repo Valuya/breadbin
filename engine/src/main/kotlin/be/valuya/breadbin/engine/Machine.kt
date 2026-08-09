@@ -8,6 +8,7 @@ import be.valuya.breadbin.engine.cpu.Bus
 import be.valuya.breadbin.engine.cpu.Cpu6510
 import be.valuya.breadbin.engine.disk.D64
 import be.valuya.breadbin.engine.disk.Iec
+import be.valuya.breadbin.engine.disk.IecWire
 import be.valuya.breadbin.engine.drive.Drive1541
 import be.valuya.breadbin.engine.drive.IecBus
 import be.valuya.breadbin.engine.mem.Memory
@@ -32,9 +33,10 @@ class Machine(
     val model: VideoModel = VideoModel.PAL,
     sampleRate: Int = 48_000,
     /**
-     * The 1541's own DOS ROM. Supplying it emulates a real drive, down to its processor, which is
-     * what fast loaders need; leaving it out falls back to answering the KERNAL's serial routines
-     * from the image, which is instant but only serves programs that load through the KERNAL.
+     * The 1541's own DOS ROM. Supplying it puts a whole second computer on the end of the serial
+     * bus, running that ROM against a disk modelled as magnetic flux, which is the only thing a
+     * fast loader can talk to. Leaving it out still gives a drive — [IecWire] answers the same
+     * protocol on the same wires — it is just one with no processor to upload code into.
      */
     driveRom: IntArray? = null,
 ) {
@@ -43,7 +45,7 @@ class Machine(
     val sid = Sid(model.clockHz, sampleRate)
     val keyboard = Keyboard()
     val datasette = Datasette()
-    val iec = Iec(memory)
+    val iec = Iec()
 
     private var cia1Interrupt = false
     private var cia2Interrupt = false
@@ -56,6 +58,13 @@ class Machine(
 
     /** The real drive, when one is fitted. */
     val drive: Drive1541? = driveRom?.let { Drive1541(it, serialBus) }
+
+    /**
+     * The drive that is always there. With no 1541 DOS to run, this answers on the three wires
+     * itself — which is what makes a disk load under a KERNAL that talks to the bus directly rather
+     * than through the routines [iec] patches, the free replacement ROMs included.
+     */
+    val wire: IecWire? = if (drive == null) IecWire(iec, serialBus) else null
 
     private val serialPorts = object : CiaPorts {
         override fun readPortA(cia: Cia): Int {
@@ -103,7 +112,6 @@ class Machine(
             memory.write(address, value)
         }
 
-        override fun trap(cpu: Cpu6510, address: Int) = iec.onTrap(cpu, address)
     }
 
     val cpu = Cpu6510(bus)
@@ -120,9 +128,11 @@ class Machine(
     private var pendingRun = true
     private var driveClockRemainder = 0
 
-    /** True when the virtual drive could be patched into this KERNAL. */
-    var virtualDriveAvailable = false
-        private set
+    /**
+     * True when there is a drive on the bus at all, which there now always is: either a real 1541
+     * running its own DOS, or the one that answers on the wires itself.
+     */
+    val driveAvailable get() = drive != null || wire != null
 
     init {
         memory.vic = vic
@@ -142,9 +152,6 @@ class Machine(
         }
         iec.onDiskChanged = { device, disk -> onDiskChanged?.invoke(device, disk) }
         vic.onFrameComplete = { frameComplete = true }
-        // With a real drive fitted the KERNAL is left alone: patching its serial routines would
-        // take the transfers away from the very thing being emulated.
-        virtualDriveAvailable = drive == null && iec.install(roms)
         reset()
     }
 
@@ -162,6 +169,7 @@ class Machine(
         memory.cartridge?.reset()
         serialBus.reset()
         drive?.reset()
+        wire?.reset()
         keystrokes.clear()
         framesSinceReset = 0
         framesUntilKeystrokes = 0
@@ -199,6 +207,7 @@ class Machine(
         sid.clock()
         datasette.cycle()
         runDrive()
+        wire?.cycle()
         cycles++
         cpu.irqLine = vic.irq || cia1Interrupt
         cpu.setNmiLine(cia2Interrupt || restoreHeld)
@@ -228,6 +237,7 @@ class Machine(
             return
         }
         iec.mount(device, disk)
+        wire?.reset()
     }
 
     /** Writes anything the real drive has changed back into its image. */

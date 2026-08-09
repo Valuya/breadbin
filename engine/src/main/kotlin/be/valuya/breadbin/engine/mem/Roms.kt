@@ -22,6 +22,7 @@ class Roms(
         const val BASIC_SIZE = 0x2000
         const val KERNAL_SIZE = 0x2000
         const val CHARACTER_SIZE = 0x1000
+        const val DRIVE_SIZE = 0x4000
 
         fun of(basic: ByteArray, kernal: ByteArray, character: ByteArray) =
             Roms(basic.toUnsigned(), kernal.toUnsigned(), character.toUnsigned())
@@ -38,6 +39,7 @@ class Roms(
          */
         fun identify(bytes: ByteArray): RomKind? = when {
             bytes.size == CHARACTER_SIZE -> RomKind.CHARACTER
+            bytes.size == DRIVE_SIZE -> RomKind.DRIVE
             bytes.size != BASIC_SIZE -> null
             // The KERNAL's reset vector at $FFFC points into the KERNAL itself ($FCE2 on a stock
             // machine), so the last six bytes are the give-away.
@@ -47,4 +49,16 @@ class Roms(
     }
 }
 
-enum class RomKind { BASIC, KERNAL, CHARACTER }
+/**
+ * A ROM the emulator can be given.
+ *
+ * The first three are the machine itself and it will not start without them. The fourth is the
+ * 1541's own DOS, which is a different computer's ROM entirely: with it the drive is emulated down
+ * to its processor and fast loaders work, and without it there is still a drive, just not that one.
+ */
+enum class RomKind(val size: Int, val required: Boolean) {
+    BASIC(Roms.BASIC_SIZE, true),
+    KERNAL(Roms.KERNAL_SIZE, true),
+    CHARACTER(Roms.CHARACTER_SIZE, true),
+    DRIVE(Roms.DRIVE_SIZE, false),
+}

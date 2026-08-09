@@ -159,6 +159,10 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
                 RomRow(stringResource(R.string.setup_basic), present[RomKind.BASIC] == true)
                 RomRow(stringResource(R.string.setup_kernal), present[RomKind.KERNAL] == true)
                 RomRow(stringResource(R.string.setup_character), present[RomKind.CHARACTER] == true)
+                // The drive's own ROM is a different computer's, and nothing needs it: disks load
+                // without it. What it buys is fast loaders, which are programs for the drive's
+                // processor and so need there to be one.
+                RomRow(stringResource(R.string.setup_drive), present[RomKind.DRIVE] == true)
             }
         }
 
