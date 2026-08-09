@@ -123,6 +123,10 @@ fun BreadbinApp(
             val file = entry.arguments?.getString("file").orEmpty()
             EmulatorScreen(
                 item = if (file == "-") null else library.find(decode(file)),
+                // Told apart from an empty machine on purpose: "-" is the user asking for BASIC,
+                // and anything else that comes back with nothing is a file that has gone missing,
+                // which they should hear about rather than watch boot to a bare prompt.
+                missing = file != "-" && library.find(decode(file)) == null,
                 library = library,
                 romStore = romStore,
                 settings = settings,

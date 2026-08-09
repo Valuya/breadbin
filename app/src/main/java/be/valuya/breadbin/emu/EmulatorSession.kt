@@ -57,6 +57,20 @@ class EmulatorSession(
 
     var paused by mutableStateOf(false)
     var warp by mutableStateOf(false)
+
+    /**
+     * Whether to run flat out while the drive is working.
+     *
+     * A disk loads at the speed a 1541 managed, which is the speed it has to be to be reliable and
+     * is also the best part of a minute for a game. A minute of a frozen SEARCHING prompt does not
+     * look like loading, it looks like a crash — so unless the user says otherwise, the wait is
+     * simply not sat through.
+     */
+    var turboWhileLoading by mutableStateOf(true)
+
+    /** True while a load is being hurried along, so the screen can say so. */
+    var loading by mutableStateOf(false)
+        private set
     var soundEnabled = settings.sound
 
     /** What is in the drive, if anything, so that writes can be saved back. */
@@ -150,13 +164,16 @@ class EmulatorSession(
             machine.runFrame()
             publish()
 
+            val hurrying = turboWhileLoading && machine.driveBusy
+            if (hurrying != loading) loading = hurrying
+
             val track = audio
-            if (warp || track == null) {
+            if (warp || hurrying || track == null) {
                 // Nothing is pacing us, so throw the samples away rather than let them pile up.
                 @Suppress("ControlFlowWithEmptyBody")
                 while (machine.sid.readSamples(audioBuffer, audioBuffer.size) > 0) {
                 }
-                if (warp) continue
+                if (warp || hurrying) continue
                 nextFrame += frameNanos
                 val wait = nextFrame - System.nanoTime()
                 if (wait > 0) LockSupport.parkNanos(wait) else nextFrame = System.nanoTime()

@@ -164,6 +164,8 @@ class Machine(
         sid.reset()
         cia1.reset()
         cia2.reset()
+        lastSerialActivity = -SERIAL_QUIET
+        lastSerialLevels = -1
         iec.reset()
         datasette.reset()
         memory.cartridge?.reset()
@@ -200,6 +202,22 @@ class Machine(
         } while (vic.cpuStalled)
     }
 
+    /**
+     * Whether the drive is in the middle of something.
+     *
+     * A transfer is a line changing, over and over; an idle bus is a line sitting still, at
+     * whichever level the two ends happened to leave it. So this counts edges rather than levels,
+     * and stays true for a moment after the last one, because a transfer has gaps in it and a flag
+     * that dropped in every gap would be no use to anybody.
+     *
+     * The app watches this so that a load — which happens at the speed a real drive managed, and so
+     * takes the best part of a minute for a game — does not have to be sat through in real time.
+     */
+    val driveBusy get() = cycles - lastSerialActivity < SERIAL_QUIET
+
+    private var lastSerialActivity = -SERIAL_QUIET
+    private var lastSerialLevels = -1
+
     private fun clockOnce() {
         vic.cycle()
         cia1.cycle()
@@ -208,6 +226,13 @@ class Machine(
         datasette.cycle()
         runDrive()
         wire?.cycle()
+        val levels = (if (serialBus.atn) 1 else 0) or
+            (if (serialBus.clock) 2 else 0) or
+            (if (serialBus.data) 4 else 0)
+        if (levels != lastSerialLevels) {
+            lastSerialLevels = levels
+            lastSerialActivity = cycles
+        }
         cycles++
         cpu.irqLine = vic.irq || cia1Interrupt
         cpu.setNmiLine(cia2Interrupt || restoreHeld)
@@ -392,6 +417,12 @@ class Machine(
          */
         const val SERIAL_OUTPUTS_INVERTED = true
         const val SERIAL_INPUTS_INVERTED = false
+
+        /**
+         * How long the bus has to stay untouched before the drive counts as idle. A fifth of a
+         * second is longer than any gap inside a transfer and shorter than anybody would notice.
+         */
+        const val SERIAL_QUIET = 200_000L
 
         /** Frames to wait after a RETURN before typing more, roughly two seconds. */
         const val KEYSTROKE_PAUSE = 100
