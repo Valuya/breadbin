@@ -1,5 +1,6 @@
 package be.valuya.breadbin.engine
 
+import be.valuya.breadbin.engine.cia.C64Key
 import be.valuya.breadbin.engine.disk.D64
 import be.valuya.breadbin.engine.disk.Petscii
 import be.valuya.breadbin.engine.mem.Roms
@@ -86,6 +87,36 @@ class BootTest {
         println(text.joinToString("\n") { "|$it" })
         assertTrue("the machine never printed it:\n${text.joinToString("\n")}",
             text.any { it.contains("HELLO WORLD") })
+    }
+
+    /**
+     * The other way in. [Machine.type] puts characters straight into the KERNAL's buffer, which is
+     * a fine shortcut and tests nothing about the keyboard: the on-screen keys go through the
+     * matrix, and for a long time the matrix was transposed and they did nothing at all.
+     */
+    @Test
+    fun `keys held down on the matrix reach the screen`() {
+        val roms = roms()
+        assumeTrue(roms != null)
+        val machine = Machine(roms!!)
+        repeat(200) { machine.runFrame() }
+
+        // The KERNAL scans once an interrupt, fifty times a second, and wants to see a key go up
+        // again before it will take the next one — so this is roughly how fast a thumb is.
+        for (key in listOf(C64Key.H, C64Key.I)) {
+            machine.keyboard.press(key)
+            repeat(4) { machine.runFrame() }
+            machine.keyboard.release(key)
+            repeat(4) { machine.runFrame() }
+        }
+        repeat(20) { machine.runFrame() }
+
+        val text = screen(machine)
+        println(text.joinToString("\n") { "|$it" })
+        assertTrue(
+            "nothing typed on the keyboard reached the screen:\n${text.joinToString("\n")}",
+            text.any { it.contains("HI") },
+        )
     }
 
     @Test

@@ -45,8 +45,14 @@ class Keyboard : CiaPorts {
     /** One bit per column, per row: set means the key is down. */
     private val matrix = IntArray(8)
 
-    private var joystick1 = 0x1F
-    private var joystick2 = 0x1F
+    /**
+     * What each joystick is pulling down, as a mask over the whole port: a zero bit is a direction
+     * or a button being held. Only the bottom five bits belong to the stick, and the other three
+     * have to stay set — they carry keyboard lines, and a stick that quietly held them low would
+     * jam a third of the keyboard down for ever.
+     */
+    private var joystick1 = 0xFF
+    private var joystick2 = 0xFF
 
     fun press(key: C64Key) {
         matrix[key.row] = matrix[key.row] or (1 shl key.column)
@@ -67,7 +73,7 @@ class Keyboard : CiaPorts {
      * caller does not have to care about.
      */
     fun setJoystick(port: JoystickPort, up: Boolean, down: Boolean, left: Boolean, right: Boolean, fire: Boolean) {
-        var bits = 0x1F
+        var bits = 0xFF
         if (up) bits = bits and 0x01.inv()
         if (down) bits = bits and 0x02.inv()
         if (left) bits = bits and 0x04.inv()
@@ -80,24 +86,28 @@ class Keyboard : CiaPorts {
     }
 
     /**
-     * Port A carries the column drive and joystick 2. A key pulls its column low whenever its row
-     * is being driven low on port B, which is how a program can scan the matrix the other way up.
+     * Port A carries the row drive and joystick 2. Scanning normally goes the other way — a row
+     * driven low here, the columns read back on port B — but a key shorts the two together, so a
+     * column held low on port B pulls every row containing a pressed key in that column low here.
+     * That is how the KERNAL notices a keypress at all without scanning: it drives all of port B
+     * low and watches port A.
      */
     override fun readPortA(cia: Cia): Int {
         var value = cia.portA and joystick2
-        val rows = cia.portB
+        val columns = cia.portB
         for (row in 0 until 8) {
-            if (rows and (1 shl row) == 0) value = value and matrix[row].inv()
+            // Any key in this row whose column is being held low shorts this row's line down.
+            if (matrix[row] and columns.inv() and 0xFF != 0) value = value and (1 shl row).inv()
         }
         return value and 0xFF
     }
 
-    /** Port B carries the row sense and joystick 1. */
+    /** Port B carries the column sense and joystick 1: the normal direction of a scan. */
     override fun readPortB(cia: Cia): Int {
         var value = cia.portB and joystick1
-        val columns = cia.portA
+        val rows = cia.portA
         for (row in 0 until 8) {
-            if (matrix[row] and columns.inv() and 0xFF != 0) value = value and (1 shl row).inv()
+            if (rows and (1 shl row) == 0) value = value and matrix[row].inv()
         }
         return value and 0xFF
     }

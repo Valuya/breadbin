@@ -50,6 +50,18 @@ class Cia(
 
     val portB: Int get() = (portBData or portBDirection.inv()) and 0xFF
 
+    /**
+     * Only the bits the chip is actually driving. A pin set to input is not holding anything down,
+     * however high it floats, so this — not [portA] — is what belongs on a wired-AND bus like the
+     * serial one.
+     */
+    val drivenA: Int get() = portAData and portADirection
+    val drivenB: Int get() = portBData and portBDirection
+
+    /** The latch and the direction, for a port whose pins are wired to something opinionated. */
+    val dataA: Int get() = portAData
+    val directionA: Int get() = portADirection
+
     fun reset() {
         portAData = 0
         portBData = 0
@@ -124,19 +136,19 @@ class Cia(
         when (register and 0x0F) {
             0x0 -> {
                 portAData = v
-                ports.writePortA(portA)
+                ports.writePortA(drivenA)
             }
             0x1 -> {
                 portBData = v
-                ports.writePortB(portB)
+                ports.writePortB(drivenB)
             }
             0x2 -> {
                 portADirection = v
-                ports.writePortA(portA)
+                ports.writePortA(drivenA)
             }
             0x3 -> {
                 portBDirection = v
-                ports.writePortB(portB)
+                ports.writePortB(drivenB)
             }
             0x4 -> timerALatch = (timerALatch and 0xFF00) or v
             0x5 -> {
