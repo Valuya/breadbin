@@ -112,7 +112,9 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
 
         Spacer(Modifier.height(24.dp))
         Button(onClick = onReady, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.setup_start_free))
+            // Only offer the free ones when they are what would actually be used: with Commodore's
+            // three already here this button starts on those, and saying otherwise would be a lie.
+            Text(stringResource(if (complete) R.string.setup_start else R.string.setup_start_free))
         }
 
         Spacer(Modifier.height(32.dp))
@@ -142,7 +144,10 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
             Text(stringResource(R.string.setup_open_vice))
         }
 
-        TextButton(onClick = { showDownload = true }) {
+        TextButton(onClick = {
+            problem = null
+            showDownload = true
+        }) {
             Icon(Icons.Filled.Download, null)
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.setup_download))
@@ -180,12 +185,6 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        if (complete) {
-            Spacer(Modifier.height(24.dp))
-            Button(onClick = onReady, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.setup_start))
-            }
-        }
         note?.let {
             Spacer(Modifier.height(12.dp))
             Text(it.resolve(), style = MaterialTheme.typography.bodyMedium)
@@ -221,6 +220,16 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
                             Spacer(Modifier.width(12.dp))
                             Text(stringResource(R.string.setup_download_working))
                         }
+                    }
+                    // A failure has to be shown here rather than on the screen behind: the dialog
+                    // stays open so the address can be corrected, and it covers everything else.
+                    problem?.takeIf { !fetching }?.let {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = it.resolve(),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                 }
             },

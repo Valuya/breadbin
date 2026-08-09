@@ -47,6 +47,10 @@ fun BreadbinApp(
     // has read the explanation of what they cost.
     var welcomed by remember(settings.welcomed) { mutableStateOf(settings.welcomed) }
 
+    // Which ROM set is in use has to be state rather than a lookup, or the settings screen goes on
+    // reporting the old answer after the user has changed it.
+    var romSource by remember { mutableStateOf(romStore.source) }
+
     // The running machine lives here rather than in the emulator screen, so that going to the
     // settings and back does not restart the game.
     val sessionHolder = remember { SessionHolder() }
@@ -74,9 +78,12 @@ fun BreadbinApp(
                 romStore = romStore,
                 onReady = {
                     welcomed = true
+                    romSource = romStore.source
                     scope.launch { settingsRepository.setWelcomed(true) }
+                    // Clear the stack rather than just this screen: reached from the settings, the
+                    // settings are still underneath, and Back from the library would reopen them.
                     navController.navigate(LIBRARY) {
-                        popUpTo(SETUP) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 },
             )
@@ -98,13 +105,14 @@ fun BreadbinApp(
                 settings = settings,
                 repository = settingsRepository,
                 scope = scope,
-                romSource = romStore.source,
+                romSource = romSource,
                 onManageRoms = {
                     sessionHolder.stop()
                     navController.navigate(SETUP)
                 },
                 onUseFreeRoms = {
                     romStore.clear()
+                    romSource = romStore.source
                     sessionHolder.stop()
                 },
                 onBack = { navController.popBackStack() },

@@ -29,8 +29,11 @@ class RomDownload(private val store: RomStore) {
     suspend fun fetch(address: String): RomDownloadResult = withContext(Dispatchers.IO) {
         val url = runCatching { URL(address.trim()) }.getOrNull()
             ?: return@withContext RomDownloadResult.Failed("That is not a web address")
-        if (url.protocol !in setOf("http", "https")) {
-            return@withContext RomDownloadResult.Failed("Only http and https addresses can be fetched")
+        // Android blocks cleartext by default from Android 9 on, so an http address would go all
+        // the way to a generic connection failure and tell the user nothing useful. Better to say
+        // what is actually wrong with it.
+        if (url.protocol != "https") {
+            return@withContext RomDownloadResult.Failed("Only https addresses can be fetched")
         }
 
         val bytes = runCatching {
