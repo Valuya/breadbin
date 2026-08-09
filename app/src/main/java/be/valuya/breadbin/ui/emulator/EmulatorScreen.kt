@@ -69,6 +69,8 @@ import be.valuya.breadbin.engine.tape.Program
 @Composable
 fun EmulatorScreen(
     item: MediaItem?,
+    /** True when a file was asked for and could not be found, as opposed to no file being asked for. */
+    missing: Boolean = false,
     library: MediaLibrary,
     romStore: RomStore,
     settings: Settings,
@@ -87,6 +89,7 @@ fun EmulatorScreen(
     // The session comes from the holder, which lives above the navigation graph, so that opening
     // the settings and coming back finds the same machine still running. Only the things the
     // machine is built from are in the key; changing the sound or the joystick size is not one.
+    val missingNotice = stringResource(R.string.emulator_missing)
     val driveRom = remember { romStore.loadDrive() }
     val session = remember(settings.model, item?.file?.path) {
         holder.obtain(settings.model.name + ":" + item?.file?.path) {
@@ -114,7 +117,14 @@ fun EmulatorScreen(
 
     LaunchedEffect(session, settings.sound) { session.setSound(settings.sound) }
 
-    LaunchedEffect(session) {
+    // Keyed on the item as well as the session: the library is read from disk, so the item can
+    // arrive a composition after the session does, and an effect that only watched the session
+    // would have already decided there was nothing to open.
+    LaunchedEffect(session, item, missing) {
+        if (missing) {
+            notice = missingNotice
+            return@LaunchedEffect
+        }
         if (item == null) return@LaunchedEffect
         if (item.kind == MediaKind.ARCHIVE) {
             val entries = session.archiveEntries(item)
@@ -289,6 +299,19 @@ fun EmulatorScreen(
             onPick = { session.run(it, settings.autostart); archive = emptyList() },
             onDismiss = { archive = emptyList() },
         )
+    }
+
+    // A disk transfers at the speed a real 1541 managed, so a game is the better part of a minute
+    // of a screen that looks stuck. The machine is run flat out through it; this says why.
+    if (session.loading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Text(
+                text = stringResource(R.string.emulator_loading),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.safeDrawingPadding().padding(16.dp),
+            )
+        }
     }
 
     notice?.let { message ->

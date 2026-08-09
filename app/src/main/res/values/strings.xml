@@ -86,6 +86,8 @@
     <string name="settings_stick_size">Joystick size</string>
     <string name="settings_opacity">Control opacity</string>
     <string name="settings_autostart">Start programs automatically</string>
+    <string name="emulator_loading">Loading…</string>
+    <string name="emulator_missing">That file is no longer in the library.</string>
     <string name="settings_autostart_hint">Types the LOAD and RUN for you when a disk or program is opened.</string>
     <string name="settings_roms">ROMs</string>
     <string name="settings_replace_roms">Add or replace Commodore\'s ROMs</string>

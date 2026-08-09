@@ -179,6 +179,36 @@ class BootTest {
         )
     }
 
+    /**
+     * The drive says when it is working, so the app can hurry a load along instead of leaving a
+     * minute of frozen SEARCHING on screen looking like a crash.
+     */
+    @Test
+    fun `the machine reports when the drive is busy and when it is not`() {
+        val roms = roms()
+        assumeTrue(roms != null)
+        val machine = Machine(roms!!)
+
+        val disk = D64.blank(Petscii.fromAscii("DISK"), Petscii.fromAscii("01"))
+        disk.writeFile(Petscii.fromAscii("BIG"), intArrayOf(0x01, 0x08) + IntArray(2000), 2, false)
+        machine.insertDisk(disk)
+
+        repeat(200) { machine.runFrame() }
+        assertTrue("the drive is busy with nothing to do", !machine.driveBusy)
+
+        machine.type("LOAD\"BIG\",8\r")
+        var everBusy = false
+        repeat(400) {
+            machine.runFrame()
+            if (machine.driveBusy) everBusy = true
+        }
+        assertTrue("the drive never reported itself busy during a load", everBusy)
+
+        // And it lets go afterwards, or the app would run flat out for ever.
+        repeat(2000) { machine.runFrame() }
+        assertTrue("the drive is still busy long after the load", !machine.driveBusy)
+    }
+
     @Test
     fun `a program loads off a tape, pulse by pulse`() {
         val roms = roms()
