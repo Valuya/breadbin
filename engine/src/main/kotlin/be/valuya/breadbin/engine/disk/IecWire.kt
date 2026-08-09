@@ -317,10 +317,12 @@ class IecWire(private val iec: Iec, private val bus: IecBus) {
          * for forty-odd cycles, and a pulse shorter than that can pass entirely while the computer
          * is not running. Both of these are comfortably longer than a badline.
          *
-         * That works out at about the speed of a real 1541, which is slow. It is also the speed at
-         * which this is reliable, and the fast-forward button exists.
+         * The worst case is a badline plus a full line of sprite fetches, which is a little over
+         * sixty cycles; a hundred leaves enough on top of that for a poll loop to go round twice.
+         * That works out at half again the speed of a real 1541 — still slow, and slow is the price
+         * of a transfer with no handshake inside a byte. The fast-forward button exists.
          */
-        const val BIT_SETUP = 150
-        const val BIT_HOLD = 150
+        const val BIT_SETUP = 100
+        const val BIT_HOLD = 100
     }
 }
