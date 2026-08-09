@@ -192,7 +192,14 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
     private companion object {
         const val OUTPUT_BUFFER = 65536
 
-        /** Maps the chip's internal scale onto 16-bit samples with room left for the filter. */
-        const val VOLUME_SCALE = 0.0009
+        /**
+         * Maps the chip's internal scale onto 16-bit samples.
+         *
+         * A voice is a twelve-bit waveform centred on zero and multiplied by an eight-bit envelope,
+         * so one at full tilt is about half a million and three of them are a million and a half.
+         * This puts that at roughly seventy per cent of full scale, which leaves the resonant filter
+         * somewhere to go before the clamp in [emit] catches it.
+         */
+        const val VOLUME_SCALE = 0.015
     }
 }
