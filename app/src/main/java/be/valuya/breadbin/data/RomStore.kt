@@ -119,6 +119,10 @@ class RomStore(private val context: Context) {
     fun loadDrive(): IntArray? = runCatching {
         val bytes = fileFor(RomKind.DRIVE).takeIf { it.length() == RomKind.DRIVE.size.toLong() }
             ?.readBytes() ?: return null
+        // A drive whose ROM does not add up never reaches its serial routines: it blinks its LED
+        // for ever and every load says SEARCHING until the user gives up. Better no real drive at
+        // all, which leaves the one written in Kotlin answering the bus perfectly well.
+        if (!Roms.driveRomPassesSelfTest(bytes)) return null
         IntArray(bytes.size) { bytes[it].toInt() and 0xFF }
     }.getOrNull()
 

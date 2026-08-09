@@ -47,6 +47,10 @@ class Roms(
          */
         fun describe(kind: RomKind, bytes: ByteArray): String {
             val checksum = "CRC %08X".format(crc32(bytes))
+            if (kind == RomKind.DRIVE) {
+                return if (driveRomPassesSelfTest(bytes)) checksum
+                else "$checksum — fails its own self-test, so it will not be used"
+            }
             if (kind != RomKind.KERNAL || bytes.size != KERNAL_SIZE) return checksum
             val revision = bytes[0xFF80 - 0xE000].toInt() and 0xFF
             val name = KERNAL_REVISIONS[revision] ?: return "revision \$%02X, %s".format(revision, checksum)
@@ -65,6 +69,40 @@ class Roms(
             0x43 to "Commodore SX-64 (251104-04)",
             0x64 to "Commodore C64 GS (390852-01)",
         )
+
+        /**
+         * Whether a 1541 DOS would survive its own power-on test.
+         *
+         * The drive checks its ROM before it does anything else, by summing each half and comparing
+         * the total against that half's own page number. A ROM that fails does not report anything:
+         * the drive blinks its LED for ever in a loop that never touches the serial bus, so from
+         * the computer's side it is simply a drive that is not there and a LOAD that says SEARCHING
+         * until somebody gives up. Worth knowing before handing it to the emulated drive.
+         *
+         * Rebuilt ROMs get this wrong routinely — the reconstruction everybody uses leaves the two
+         * checksum bytes at zero — so this is not a hypothetical.
+         */
+        fun driveRomPassesSelfTest(bytes: ByteArray): Boolean =
+            bytes.size == DRIVE_SIZE &&
+                halfSum(bytes, 0x00) == 0xE0 &&
+                halfSum(bytes, 0xE0) == 0xC0
+
+        /** The drive's own checksum: thirty-two pages added up backwards, carries and all. */
+        private fun halfSum(bytes: ByteArray, startPage: Int): Int {
+            var total = 0
+            var carry = 0
+            var page = startPage
+            repeat(32) {
+                page = (page - 1) and 0xFF
+                val base = (page shl 8) - 0xC000
+                for (i in 0 until 256) {
+                    val sum = total + (bytes[base + i].toInt() and 0xFF) + carry
+                    total = sum and 0xFF
+                    carry = if (sum > 0xFF) 1 else 0
+                }
+            }
+            return (total + carry) and 0xFF
+        }
 
         /** Whether this is one of Commodore's own KERNALs, rather than a replacement. */
         fun isCommodoreKernal(bytes: ByteArray) =
