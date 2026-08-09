@@ -100,6 +100,7 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
     }
 
     val present = remember(version) { RomKind.entries.associateWith { romStore.has(it) } }
+    val described = remember(version) { RomKind.entries.associateWith { romStore.describe(it) } }
     val complete = present.filterKeys { it.required }.values.all { it }
 
     Scaffold(
@@ -126,13 +127,17 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
             }
 
             Section(stringResource(R.string.setup_section_roms))
-            RomRow(stringResource(R.string.setup_basic), present[RomKind.BASIC] == true)
-            RomRow(stringResource(R.string.setup_kernal), present[RomKind.KERNAL] == true)
-            RomRow(stringResource(R.string.setup_character), present[RomKind.CHARACTER] == true)
+            RomRow(stringResource(R.string.setup_basic), present[RomKind.BASIC] == true, described[RomKind.BASIC])
+            RomRow(stringResource(R.string.setup_kernal), present[RomKind.KERNAL] == true, described[RomKind.KERNAL])
+            RomRow(
+                stringResource(R.string.setup_character),
+                present[RomKind.CHARACTER] == true,
+                described[RomKind.CHARACTER],
+            )
             // The drive's own ROM is a different computer's, and nothing needs it: disks load
             // without it. What it buys is fast loaders, which are programs for the drive's own
             // processor and so need there to be one.
-            RomRow(stringResource(R.string.setup_drive), present[RomKind.DRIVE] == true)
+            RomRow(stringResource(R.string.setup_drive), present[RomKind.DRIVE] == true, described[RomKind.DRIVE])
 
             Section(stringResource(R.string.setup_section_add))
             ListItem(
@@ -284,9 +289,10 @@ private fun Message.resolve(): String = when (this) {
 }
 
 @Composable
-private fun RomRow(label: String, present: Boolean) {
+private fun RomRow(label: String, present: Boolean, detail: String? = null) {
     ListItem(
         headlineContent = { Text(label) },
+        supportingContent = detail?.let { { Text(it, style = MaterialTheme.typography.bodySmall) } },
         leadingContent = {
             Icon(
                 imageVector = if (present) Icons.Filled.CheckCircle else Icons.Outlined.Circle,

@@ -37,6 +37,42 @@ class Roms(
          * perfectly good dumps differ from the ones Commodore shipped (a fixed KERNAL, a JiffyDOS
          * replacement), and refusing those would be unhelpful.
          */
+        /**
+         * What a ROM is, in as much detail as it will admit to.
+         *
+         * A KERNAL says so itself: Commodore put the revision number at $FF80, which is the last
+         * word on the subject and works for revisions nobody here has ever seen. Nothing else has
+         * anything so convenient, so the rest get a checksum — not to look up, but to tell two
+         * files apart and to give the user something to search for.
+         */
+        fun describe(kind: RomKind, bytes: ByteArray): String {
+            val checksum = "CRC %08X".format(crc32(bytes))
+            if (kind != RomKind.KERNAL || bytes.size != KERNAL_SIZE) return checksum
+            val revision = bytes[0xFF80 - 0xE000].toInt() and 0xFF
+            val name = KERNAL_REVISIONS[revision] ?: return "revision \$%02X, %s".format(revision, checksum)
+            return "$name, $checksum"
+        }
+
+        /**
+         * What the byte at $FF80 means. Revision three is the one to want: it is the last, it is
+         * what almost everything was tested against, and revision one has the serial bus bug that
+         * some software will not load past.
+         */
+        private val KERNAL_REVISIONS = mapOf(
+            0xAA to "Commodore revision 1 (901227-01)",
+            0x00 to "Commodore revision 2 (901227-02)",
+            0x03 to "Commodore revision 3 (901227-03)",
+            0x43 to "Commodore SX-64 (251104-04)",
+            0x64 to "Commodore C64 GS (390852-01)",
+        )
+
+        /** Whether this is one of Commodore's own KERNALs, rather than a replacement. */
+        fun isCommodoreKernal(bytes: ByteArray) =
+            bytes.size == KERNAL_SIZE && (bytes[0xFF80 - 0xE000].toInt() and 0xFF) in KERNAL_REVISIONS
+
+        fun crc32(bytes: ByteArray): Long =
+            java.util.zip.CRC32().apply { update(bytes) }.value
+
         fun identify(bytes: ByteArray): RomKind? = when {
             bytes.size == CHARACTER_SIZE -> RomKind.CHARACTER
             bytes.size == DRIVE_SIZE -> RomKind.DRIVE
