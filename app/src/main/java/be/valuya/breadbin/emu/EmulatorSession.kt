@@ -71,12 +71,23 @@ class EmulatorSession(
     /** True while a load is being hurried along, so the screen can say so. */
     var loading by mutableStateOf(false)
         private set
+
+    /**
+     * True once the processor has stopped dead on an instruction that halts it.
+     *
+     * Real hardware does this too, and on real hardware it is equally invisible: the picture simply
+     * stops changing. Worth saying out loud, because the usual cause is a program jumping into a
+     * KERNAL that is not the one it was written against, and that has a fix.
+     */
+    var stopped by mutableStateOf(false)
+        private set
     var soundEnabled = settings.sound
 
     /** What is in the drive, if anything, so that writes can be saved back. */
     private var mountedDisk: D64? = null
 
     private var thread: Thread? = null
+    private var lastPublish = 0L
 
     @Volatile
     private var running = false
@@ -162,18 +173,27 @@ class EmulatorSession(
             }
 
             machine.runFrame()
-            publish()
 
-            val hurrying = turboWhileLoading && machine.driveBusy
-            if (hurrying != loading) loading = hurrying
+            val hurrying = warp || (turboWhileLoading && machine.driveBusy)
+            // Painting the picture costs more than emulating the frame that made it, so running
+            // flat out while publishing every frame spends most of its time drawing pictures
+            // nobody will ever see. Twenty-five a second is more than enough to watch a loader by.
+            val now = System.nanoTime()
+            if (!hurrying || now - lastPublish >= PUBLISH_INTERVAL) {
+                lastPublish = now
+                publish()
+            }
+
+            if (hurrying != loading) loading = turboWhileLoading && machine.driveBusy
+            if (machine.cpu.jammed != stopped) stopped = machine.cpu.jammed
 
             val track = audio
-            if (warp || hurrying || track == null) {
+            if (hurrying || track == null) {
                 // Nothing is pacing us, so throw the samples away rather than let them pile up.
                 @Suppress("ControlFlowWithEmptyBody")
                 while (machine.sid.readSamples(audioBuffer, audioBuffer.size) > 0) {
                 }
-                if (warp || hurrying) continue
+                if (hurrying) continue
                 nextFrame += frameNanos
                 val wait = nextFrame - System.nanoTime()
                 if (wait > 0) LockSupport.parkNanos(wait) else nextFrame = System.nanoTime()
@@ -290,5 +310,8 @@ class EmulatorSession(
 
     private companion object {
         const val SAMPLE_RATE = 48_000
+
+        /** How often the picture is handed to the screen while running flat out: forty milliseconds. */
+        const val PUBLISH_INTERVAL = 40_000_000L
     }
 }
