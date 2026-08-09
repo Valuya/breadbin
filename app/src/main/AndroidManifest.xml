@@ -2,9 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-      No INTERNET permission, on purpose: an emulator has no business talking to a network, and
-      leaving the permission out means it cannot start doing so by accident.
+      The only thing that uses this is the ROM import, and only when somebody types an address into
+      it and presses the button. Nothing else in the app opens a connection: there is no analytics,
+      no update check, no ads and nothing phoning home.
     -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"

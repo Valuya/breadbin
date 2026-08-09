@@ -51,6 +51,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import be.valuya.breadbin.R
 import be.valuya.breadbin.data.MediaItem
 import be.valuya.breadbin.data.MediaLibrary
+import be.valuya.breadbin.data.RomSource
 import be.valuya.breadbin.data.RomStore
 import be.valuya.breadbin.data.Settings
 import be.valuya.breadbin.emu.EmulatorSession
@@ -75,6 +76,7 @@ fun EmulatorScreen(
     onSettings: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val freeRomsDiskNotice = stringResource(R.string.emulator_free_roms_disk)
     val roms = remember { romStore.load() }
     if (roms == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -125,8 +127,10 @@ fun EmulatorScreen(
             }
         }
         notice = session.open(item, settings.autostart)
-        if (item.kind == MediaKind.DISK && !session.machine.virtualDriveAvailable) {
-            notice = null
+        // The free ROMs drive the serial bus themselves, so the emulated drive never hears from
+        // them. Better to say that up front than to let the machine sit there searching.
+        if (item.kind == MediaKind.DISK && romStore.source == RomSource.BUNDLED) {
+            notice = freeRomsDiskNotice
         }
     }
 

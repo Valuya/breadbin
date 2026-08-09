@@ -6,12 +6,27 @@ import be.valuya.breadbin.engine.mem.RomKind
 import be.valuya.breadbin.engine.mem.Roms
 import java.io.File
 
+/** Which set of ROMs the machine is running on. */
+enum class RomSource {
+    /** The free replacement ROMs shipped with the app, so that it works out of the box. */
+    BUNDLED,
+
+    /** Commodore's own, which the user supplied. */
+    SUPPLIED,
+}
+
 /**
- * Where the three Commodore ROMs live once the user has supplied them.
+ * Where the machine's ROMs come from.
  *
- * They are kept in the app's own storage rather than referenced where they were picked from: a
- * content URI granted by the file picker does not survive a reboot, and an emulator that forgets
- * how to start every few days is not much use.
+ * Breadbin ships the MEGA65 project's Open ROMs, which are free and are not Commodore's, so it can
+ * boot the moment it is installed. They are not as compatible as the originals — most visibly, they
+ * drive the serial bus themselves rather than through the KERNAL routines the emulated drive
+ * answers, so disks do not load under them — and the app says so rather than leaving it to be
+ * discovered.
+ *
+ * Commodore's own ROMs, if the user has them, are stored in the app's own storage rather than
+ * referenced where they were picked from: a content URI granted by the file picker does not survive
+ * a reboot, and an emulator that forgets how to start every few days is not much use.
  */
 class RomStore(private val context: Context) {
 
@@ -21,7 +36,10 @@ class RomStore(private val context: Context) {
 
     fun has(kind: RomKind) = fileFor(kind).length() == expectedSize(kind)
 
+    /** True when the user has supplied all three of Commodore's ROMs. */
     val complete get() = RomKind.entries.all { has(it) }
+
+    val source get() = if (complete) RomSource.SUPPLIED else RomSource.BUNDLED
 
     /**
      * Stores a file the user picked, working out from its contents which of the three it is.
@@ -30,21 +48,38 @@ class RomStore(private val context: Context) {
     fun accept(uri: Uri): RomKind? {
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
         val kind = Roms.identify(bytes) ?: return null
-        fileFor(kind).writeBytes(bytes)
+        accept(bytes, kind)
         return kind
     }
 
-    fun load(): Roms? {
-        if (!complete) return null
-        return runCatching {
-            Roms.of(
-                basic = fileFor(RomKind.BASIC).readBytes(),
-                kernal = fileFor(RomKind.KERNAL).readBytes(),
-                character = fileFor(RomKind.CHARACTER).readBytes(),
-            )
-        }.getOrNull()
+    /** Stores bytes that have already been identified, whatever they arrived by. */
+    fun accept(bytes: ByteArray, kind: RomKind) {
+        fileFor(kind).writeBytes(bytes)
     }
 
+    /** The ROMs to run: Commodore's if they are all here, otherwise the free ones. */
+    fun load(): Roms? = if (complete) loadSupplied() else loadBundled()
+
+    private fun loadSupplied(): Roms? = runCatching {
+        Roms.of(
+            basic = fileFor(RomKind.BASIC).readBytes(),
+            kernal = fileFor(RomKind.KERNAL).readBytes(),
+            character = fileFor(RomKind.CHARACTER).readBytes(),
+        )
+    }.getOrNull()
+
+    fun loadBundled(): Roms? = runCatching {
+        Roms.of(
+            basic = asset("basic.rom"),
+            kernal = asset("kernal.rom"),
+            character = asset("chargen.rom"),
+        )
+    }.getOrNull()
+
+    private fun asset(name: String) =
+        context.assets.open("$BUNDLED_DIRECTORY/$name").use { it.readBytes() }
+
+    /** Throws away Commodore's ROMs and falls back to the free ones. */
     fun clear() {
         for (kind in RomKind.entries) fileFor(kind).delete()
     }
@@ -53,5 +88,15 @@ class RomStore(private val context: Context) {
         RomKind.BASIC -> Roms.BASIC_SIZE.toLong()
         RomKind.KERNAL -> Roms.KERNAL_SIZE.toLong()
         RomKind.CHARACTER -> Roms.CHARACTER_SIZE.toLong()
+    }
+
+    companion object {
+        private const val BUNDLED_DIRECTORY = "openroms"
+
+        /**
+         * Where to send somebody who wants Commodore's ROMs. VICE is the desktop emulator, and it
+         * ships them; the app opens this in a browser rather than fetching anything itself.
+         */
+        const val WHERE_TO_GET_ROMS = "https://vice-emu.sourceforge.io/index.html#download"
     }
 }
