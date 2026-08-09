@@ -90,6 +90,7 @@ fun EmulatorScreen(
     // the settings and coming back finds the same machine still running. Only the things the
     // machine is built from are in the key; changing the sound or the joystick size is not one.
     val missingNotice = stringResource(R.string.emulator_missing)
+    val stoppedNotice = stringResource(R.string.emulator_stopped)
     val driveRom = remember { romStore.loadDrive() }
     val session = remember(settings.model, item?.file?.path) {
         holder.obtain(settings.model.name + ":" + item?.file?.path) {
@@ -299,6 +300,11 @@ fun EmulatorScreen(
             onPick = { session.run(it, settings.autostart); archive = emptyList() },
             onDismiss = { archive = emptyList() },
         )
+    }
+
+    // A halted processor looks exactly like a hung emulator, and the usual cause has a fix.
+    LaunchedEffect(session.stopped) {
+        if (session.stopped && romStore.source == RomSource.BUNDLED) notice = stoppedNotice
     }
 
     // A disk transfers at the speed a real 1541 managed, so a game is the better part of a minute

@@ -17,6 +17,9 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
 
     private val voices = Array(3) { Voice() }
 
+    /** Which voice each one syncs and rings against: the one before it, wrapping round. */
+    private val sources = arrayOf(voices[2], voices[0], voices[1])
+
     private var filterCutoff = 0
     private var filterResonance = 0
     private var filterRouting = 0
@@ -29,6 +32,14 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
     // state variable filter
     private var lowPass = 0.0
     private var bandPass = 0.0
+
+    /**
+     * The filter's two coefficients, worked out when the registers change rather than on every one
+     * of the million cycles a second the chip is clocked. Nothing about them moves in between, and
+     * a transcendental per cycle is the most expensive thing in the whole emulator.
+     */
+    private var w0 = 0.0
+    private var q = 0.0
 
     private var cyclesPerSample = clockHz.toDouble() / sampleRate
     private var sampleAccumulator = 0.0
@@ -49,6 +60,7 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
         voice3Off = false
         lowPass = 0.0
         bandPass = 0.0
+        updateFilter()
         writeIndex = 0
         readIndex = 0
         sampleAccumulator = 0.0
@@ -89,11 +101,18 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
             return
         }
         when (register) {
-            0x15 -> filterCutoff = (filterCutoff and 0x7F8) or (v and 0x07)
-            0x16 -> filterCutoff = (filterCutoff and 0x007) or (v shl 3)
+            0x15 -> {
+                filterCutoff = (filterCutoff and 0x7F8) or (v and 0x07)
+                updateFilter()
+            }
+            0x16 -> {
+                filterCutoff = (filterCutoff and 0x007) or (v shl 3)
+                updateFilter()
+            }
             0x17 -> {
                 filterRouting = v and 0x0F
                 filterResonance = (v shr 4) and 0x0F
+                updateFilter()
             }
             0x18 -> {
                 volume = v and 0x0F
@@ -130,16 +149,14 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
     private fun mix(): Double {
         var direct = 0.0
         var filtered = 0.0
-        for (i in 0 until 2 + 1) {
+        for (i in 0 until 3) {
             if (i == 2 && voice3Off && filterRouting and 0x04 == 0) continue
-            val sample = voices[i].output(voices[(i + 2) % 3])
+            val sample = voices[i].output(sources[i])
             if (filterRouting and (1 shl i) != 0) filtered += sample else direct += sample
         }
 
         // A two-integrator loop: one integrator gives band-pass, the second low-pass, and what is
         // left over is high-pass.
-        val w0 = cutoffFrequency() * 2.0 * Math.PI / clockHz
-        val q = 1.0 / (0.707 + filterResonance / 15.0 * 1.8)
         val highPass = bandPass * q - lowPass - filtered
         bandPass += w0 * highPass
         lowPass += w0 * bandPass
@@ -151,6 +168,11 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
         if (filterMode and 0x02 != 0) out += bandPass
         if (filterMode and 0x04 != 0) out += highPass
         return out * volume / 15.0
+    }
+
+    private fun updateFilter() {
+        w0 = cutoffFrequency() * 2.0 * Math.PI / clockHz
+        q = 1.0 / (0.707 + filterResonance / 15.0 * 1.8)
     }
 
     /**
