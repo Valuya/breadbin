@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      No INTERNET permission, on purpose: an emulator has no business talking to a network, and
+      leaving the permission out means it cannot start doing so by accident.
+    -->
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Breadbin">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|smallestScreenSize"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Breadbin">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Opening a disk, tape or cartridge from a file manager starts it here. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.d64" />
+                <data android:pathPattern=".*\\.D64" />
+                <data android:pathPattern=".*\\.t64" />
+                <data android:pathPattern=".*\\.T64" />
+                <data android:pathPattern=".*\\.tap" />
+                <data android:pathPattern=".*\\.TAP" />
+                <data android:pathPattern=".*\\.crt" />
+                <data android:pathPattern=".*\\.CRT" />
+                <data android:pathPattern=".*\\.prg" />
+                <data android:pathPattern=".*\\.PRG" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
