@@ -24,4 +24,6 @@ data class Settings(
     val opacity: Float = 0.5f,
     val autostart: Boolean = true,
     val joystickPort: Int = 2,
+    /** Whether the opening explanation has been read, so it is only shown once. */
+    val welcomed: Boolean = false,
 )

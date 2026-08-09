@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import be.valuya.breadbin.R
 import be.valuya.breadbin.data.Aspect
 import be.valuya.breadbin.data.Settings
+import be.valuya.breadbin.data.RomSource
 import be.valuya.breadbin.data.SettingsRepository
 import be.valuya.breadbin.engine.vic.VideoModel
 import kotlinx.coroutines.CoroutineScope
@@ -42,7 +43,9 @@ fun SettingsScreen(
     settings: Settings,
     repository: SettingsRepository,
     scope: CoroutineScope,
-    onReplaceRoms: () -> Unit,
+    romSource: RomSource,
+    onManageRoms: () -> Unit,
+    onUseFreeRoms: () -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -137,9 +140,26 @@ fun SettingsScreen(
 
             Section(stringResource(R.string.settings_roms))
             ListItem(
-                headlineContent = { Text(stringResource(R.string.settings_replace_roms)) },
-                modifier = Modifier.clickable(onClick = onReplaceRoms),
+                headlineContent = { Text(stringResource(R.string.settings_rom_source)) },
+                supportingContent = {
+                    Text(
+                        stringResource(
+                            if (romSource == RomSource.SUPPLIED) R.string.setup_using_supplied
+                            else R.string.setup_using_free
+                        )
+                    )
+                },
             )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_replace_roms)) },
+                modifier = Modifier.clickable(onClick = onManageRoms),
+            )
+            if (romSource == RomSource.SUPPLIED) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.settings_use_free)) },
+                    modifier = Modifier.clickable(onClick = onUseFreeRoms),
+                )
+            }
 
             Section(stringResource(R.string.settings_about))
             Text(

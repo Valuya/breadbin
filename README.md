@@ -26,15 +26,26 @@ device, which is how most of it was checked (see [Tests](#tests)).
 
 ## The ROMs
 
-**Breadbin does not include the Commodore ROMs and cannot run without them.** BASIC, the KERNAL and
-the character set are still someone's copyright, and shipping them with an app is not something to
-do casually. The app asks for the three files once, works out from their size and contents which is
-which, and keeps them.
+**Breadbin works the moment it is installed.** It ships the MEGA65 project's
+[Open ROMs](https://github.com/MEGA65/open-roms) — a free, independently written replacement for
+BASIC, the KERNAL and the character set, under the LGPL, containing none of Commodore's code. The
+exact images in `app/src/main/assets/openroms/` are covered by the boot test: they reach a `READY.`
+prompt, run BASIC and load a program off a tape.
 
-If you own a C64 you can read them off it. Otherwise they come with
-[VICE](https://vice-emu.sourceforge.io/), and the MEGA65 project's
-[Open ROMs](https://github.com/MEGA65/open-roms) are a freely licensed replacement set that also
-works (with the disk caveat below).
+**They cost you disks.** Open ROMs drives the serial bus itself rather than through the KERNAL
+routines the emulated drive answers, so `.d64` images will not load under them. Tapes, cartridges
+and BASIC all do. The app says so on the setup screen and again when you open a disk, rather than
+leaving you watching a machine that sits there searching.
+
+**Commodore's own ROMs lift that limit.** Breadbin will take them three ways — the file picker, a
+link that opens [VICE's download page](https://vice-emu.sourceforge.io/) in your browser, or an
+address you paste in for it to fetch — and works out which of the three each file is from its
+contents. If you own a C64 you can read them off it instead.
+
+What it will not do is come with an address already in it. They are still someone's copyright, and
+an app that ships a pointer to a copy of them is the thing doing the distributing; one that fetches
+from an address you typed is a tool you pointed somewhere. That fetch is also the only thing in the
+app that ever opens a connection — no analytics, no update check, no ads, nothing phoning home.
 
 ## What works
 
