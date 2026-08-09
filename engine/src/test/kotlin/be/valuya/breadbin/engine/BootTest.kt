@@ -1,5 +1,6 @@
 package be.valuya.breadbin.engine
 
+import be.valuya.breadbin.engine.cia.C64Key
 import be.valuya.breadbin.engine.disk.D64
 import be.valuya.breadbin.engine.disk.Petscii
 import be.valuya.breadbin.engine.mem.Roms
@@ -88,31 +89,52 @@ class BootTest {
             text.any { it.contains("HELLO WORLD") })
     }
 
+    /**
+     * The other way in. [Machine.type] puts characters straight into the KERNAL's buffer, which is
+     * a fine shortcut and tests nothing about the keyboard: the on-screen keys go through the
+     * matrix, and for a long time the matrix was transposed and they did nothing at all.
+     */
+    @Test
+    fun `keys held down on the matrix reach the screen`() {
+        val roms = roms()
+        assumeTrue(roms != null)
+        val machine = Machine(roms!!)
+        repeat(200) { machine.runFrame() }
+
+        // The KERNAL scans once an interrupt, fifty times a second, and wants to see a key go up
+        // again before it will take the next one — so this is roughly how fast a thumb is.
+        for (key in listOf(C64Key.H, C64Key.I)) {
+            machine.keyboard.press(key)
+            repeat(4) { machine.runFrame() }
+            machine.keyboard.release(key)
+            repeat(4) { machine.runFrame() }
+        }
+        repeat(20) { machine.runFrame() }
+
+        val text = screen(machine)
+        println(text.joinToString("\n") { "|$it" })
+        assertTrue(
+            "nothing typed on the keyboard reached the screen:\n${text.joinToString("\n")}",
+            text.any { it.contains("HI") },
+        )
+    }
+
     @Test
     fun `a program loads off a disk through the drive`() {
         val roms = roms()
         assumeTrue(roms != null)
         val machine = Machine(roms!!)
-        assumeTrue("this KERNAL cannot be patched for the drive", machine.virtualDriveAvailable)
-
         // A BASIC program that prints something recognisable: 10 PRINT"IT LOADED"
-        val program = basicPrint("IT LOADED")
+        // The two-byte load address goes in front: LOAD without a secondary address puts the file
+        // at the start of BASIC whatever it claims, so leaving it off loses the first two bytes.
+        val program = intArrayOf(0x01, 0x08) + basicPrint("IT LOADED")
         val disk = D64.blank(Petscii.fromAscii("TEST"), Petscii.fromAscii("01"))
         disk.writeFile(Petscii.fromAscii("HELLO"), program, fileType = 2, replace = false)
         machine.insertDisk(disk)
 
         repeat(200) { machine.runFrame() }
         machine.type("LOAD\"HELLO\",8\r")
-        repeat(300) { machine.runFrame() }
-
-        // A KERNAL that drives the serial lines itself never calls the routines the drive is
-        // patched into, and no amount of emulating a 1541 above the KERNAL will help it.
-        assumeTrue(
-            "this KERNAL drives the serial lines itself instead of going through its own routines, " +
-                "so an emulated drive that sits above the KERNAL cannot serve it",
-            machine.iec.bytesServed > 0,
-        )
-
+        repeat(900) { machine.runFrame() }
         machine.type("RUN\r")
         repeat(200) { machine.runFrame() }
 

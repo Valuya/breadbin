@@ -3,8 +3,8 @@
 
     <!-- Setup -->
     <string name="setup_title">Ready when you are</string>
-    <string name="setup_explanation">Breadbin comes with Open ROMs, a free replacement for the Commodore 64\'s BASIC, KERNAL and character set, so it works straight away. Tapes, cartridges and BASIC all run on them.</string>
-    <string name="setup_limit">Disks do not. Open ROMs talks to the disk drive its own way, which the emulated drive cannot answer. For disks — and for the best compatibility generally — you need Commodore\'s own three ROMs.</string>
+    <string name="setup_explanation">Breadbin comes with Open ROMs, a free replacement for the Commodore 64\'s BASIC, KERNAL and character set, so it works straight away. Disks, tapes, cartridges and BASIC all run on them.</string>
+    <string name="setup_limit">Commodore\'s own ROMs are still worth having. They are what everything was written against, so anything that behaves oddly on the free ones is worth trying again on those.</string>
     <string name="setup_where">If you own a C64 you can read them off it. Otherwise they come with VICE, the desktop emulator. Breadbin will not fetch them for you; the button opens the download page in your browser and you bring the files back.</string>
     <string name="setup_open_vice">Where to get them</string>
     <string name="setup_start_free">Start with the free ROMs</string>
@@ -15,6 +15,7 @@
     <string name="setup_basic">BASIC</string>
     <string name="setup_kernal">KERNAL</string>
     <string name="setup_character">Character set</string>
+    <string name="setup_drive">1541 DOS (optional)</string>
     <string name="setup_missing">Not loaded</string>
     <string name="setup_loaded">Loaded</string>
     <string name="setup_start">Start</string>
@@ -61,8 +62,6 @@
     <string name="emulator_load_first">Load the first program</string>
     <string name="emulator_type">Type text</string>
     <string name="emulator_restore">RESTORE</string>
-    <string name="emulator_no_drive">This KERNAL is not one Breadbin can attach a drive to, so disks will not load.</string>
-    <string name="emulator_free_roms_disk">Disks do not load on the free ROMs. Add Commodore\'s KERNAL in Settings and this disk will work.</string>
     <string name="emulator_tape_hint">Type LOAD and press RETURN, then press Play.</string>
     <string name="emulator_paused">Paused</string>
     <string name="emulator_back">Back to the library</string>

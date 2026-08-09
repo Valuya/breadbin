@@ -76,7 +76,6 @@ fun EmulatorScreen(
     onSettings: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val freeRomsDiskNotice = stringResource(R.string.emulator_free_roms_disk)
     val roms = remember { romStore.load() }
     if (roms == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -88,9 +87,10 @@ fun EmulatorScreen(
     // The session comes from the holder, which lives above the navigation graph, so that opening
     // the settings and coming back finds the same machine still running. Only the things the
     // machine is built from are in the key; changing the sound or the joystick size is not one.
+    val driveRom = remember { romStore.loadDrive() }
     val session = remember(settings.model, item?.file?.path) {
         holder.obtain(settings.model.name + ":" + item?.file?.path) {
-            EmulatorSession(roms, settings) { bytes -> item?.let { library.save(it, bytes) } }
+            EmulatorSession(roms, settings, driveRom) { bytes -> item?.let { library.save(it, bytes) } }
         }
     }
 
@@ -115,10 +115,7 @@ fun EmulatorScreen(
     LaunchedEffect(session, settings.sound) { session.setSound(settings.sound) }
 
     LaunchedEffect(session) {
-        if (item == null) {
-            if (!session.machine.virtualDriveAvailable) notice = null
-            return@LaunchedEffect
-        }
+        if (item == null) return@LaunchedEffect
         if (item.kind == MediaKind.ARCHIVE) {
             val entries = session.archiveEntries(item)
             if (entries.size > 1) {
@@ -127,11 +124,6 @@ fun EmulatorScreen(
             }
         }
         notice = session.open(item, settings.autostart)
-        // The free ROMs drive the serial bus themselves, so the emulated drive never hears from
-        // them. Better to say that up front than to let the machine sit there searching.
-        if (item.kind == MediaKind.DISK && romStore.source == RomSource.BUNDLED) {
-            notice = freeRomsDiskNotice
-        }
     }
 
     // Pausing when the app goes away stops a game running in the user's pocket, and stops the
@@ -307,18 +299,7 @@ fun EmulatorScreen(
         )
     }
 
-    if (item?.kind == MediaKind.DISK && !session.machine.virtualDriveAvailable) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            Text(
-                text = stringResource(R.string.emulator_no_drive),
-                color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .safeDrawingPadding()
-                    .padding(16.dp),
-            )
-        }
-    }
+
 }
 
 @Composable
