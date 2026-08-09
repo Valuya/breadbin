@@ -223,7 +223,9 @@ class Machine(
     fun flushDrive() {
         val real = drive ?: return
         real.flush()
-        val disk = iec.disk(real.deviceNumber)
+        // The image is the drive's own, not the virtual drive's: a real drive is mounted straight
+        // into the mechanism and never goes through the IEC layer at all.
+        val disk = real.mountedDisk
         if (disk != null && disk.dirty) {
             onDiskChanged?.invoke(real.deviceNumber, disk)
             disk.markClean()

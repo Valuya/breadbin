@@ -149,6 +149,10 @@ object Gcr {
             if (header[0] != 0x08) continue
             val sector = header[2]
             if (header[3] != track || sector >= sectors) continue
+            // The header carries its own checksum, and without checking it a header that decoded
+            // as valid GCR but was half-written could put a good data block on top of a good
+            // sector — which is exactly the damage this decoder exists to avoid.
+            if (header[1] != (sector xor header[3] xor header[4] xor header[5])) continue
 
             // The data block is behind the next sync mark along.
             var search = at + 10

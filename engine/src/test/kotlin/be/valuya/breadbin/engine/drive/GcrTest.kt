@@ -86,6 +86,26 @@ class GcrTest {
     }
 
     @Test
+    fun `a header with a broken checksum is left alone`() {
+        val disk = D64.blank(Petscii.fromAscii("TEST"), Petscii.fromAscii("01"))
+        val gcr = Gcr.buildTrack(disk, 18, 0x30, 0x31)
+
+        // Corrupt one sector's header checksum. The data block behind it is still perfectly good,
+        // which is what makes this dangerous: without the check it would be written somewhere.
+        val header = IntArray(8)
+        var at = 0
+        while (gcr[at] != 0xFF) at++
+        while (gcr[at] == 0xFF) at++
+        assertTrue(Gcr.decodeQuint(gcr, at, header, 0))
+        header[1] = header[1] xor 0xFF
+        Gcr.encodeQuad(header, 0, gcr, at)
+
+        val recovered = D64.blank(Petscii.fromAscii("BLANK"), Petscii.fromAscii("02"))
+        val found = Gcr.decodeTrack(gcr, 18, recovered)
+        assertEquals(D64.sectorsPerTrack(18) - 1, found)
+    }
+
+    @Test
     fun `the density and the byte rate go together`() {
         assertEquals(3, Gcr.densityOf(1))
         assertEquals(0, Gcr.densityOf(35))

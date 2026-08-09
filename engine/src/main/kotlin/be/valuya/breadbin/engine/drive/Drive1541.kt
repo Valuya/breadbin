@@ -34,6 +34,9 @@ class Drive1541(
     private var disk: D64? = null
     private var writeProtected = false
 
+    /** The image in the drive, so that whoever put it there can write it back out. */
+    val mountedDisk: D64? get() = disk
+
     /** The track under the head, in half-tracks, so that a seek can land between two. */
     private var halfTrack = 36 // track 18, where the directory is
 
