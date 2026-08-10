@@ -344,12 +344,19 @@ class IecWire(private val iec: Iec, private val bus: IecBus) {
          * for forty-odd cycles, and a pulse shorter than that can pass entirely while the computer
          * is not running. Both of these are comfortably longer than a badline.
          *
-         * The worst case is a badline plus a full line of sprite fetches, which is a little over
-         * sixty cycles; a hundred leaves enough on top of that for a poll loop to go round twice.
-         * That works out at half again the speed of a real 1541 — still slow, and slow is the price
-         * of a transfer with no handshake inside a byte. The fast-forward button exists.
+         * Where the floor actually is was measured rather than guessed, by loading a file through
+         * Commodore's own KERNAL at descending values: fifty fails, fifty-five passes, sixty and
+         * above pass comfortably. That cliff sits exactly where a badline would put it. Seventy is
+         * taken rather than fifty-five, because passing by five cycles is not passing — the tests
+         * here run one KERNAL against a handful of files, and a loader nobody has tried deserves
+         * the margin.
+         *
+         * That is a third off every load compared with the hundred this used to be, and about
+         * twice the speed of a real 1541. It is still not fast, and it cannot be: there is no
+         * handshake inside a byte, so every bit has to be held long enough for a computer that
+         * might not be running to see it.
          */
-        const val BIT_SETUP = 100
-        const val BIT_HOLD = 100
+        const val BIT_SETUP = 70
+        const val BIT_HOLD = 70
     }
 }
