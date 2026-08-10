@@ -41,6 +41,11 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
     private var w0 = 0.0
     private var q = 0.0
 
+    // The capacitor between the chip and the outside world, as one pole.
+    private var blocked = 0.0
+    private var previousSample = 0.0
+    private var primed = false
+
     private var cyclesPerSample = clockHz.toDouble() / sampleRate
     private var sampleAccumulator = 0.0
     private var sampleSum = 0.0
@@ -60,6 +65,9 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
         voice3Off = false
         lowPass = 0.0
         bandPass = 0.0
+        blocked = 0.0
+        previousSample = 0.0
+        primed = false
         updateFilter()
         writeIndex = 0
         readIndex = 0
@@ -167,7 +175,16 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
         if (filterMode and 0x01 != 0) out += lowPass
         if (filterMode and 0x02 != 0) out += bandPass
         if (filterMode and 0x04 != 0) out += highPass
-        return out * volume / 15.0
+
+        // The chip's output stage sits on a large standing offset, and the master volume multiplies
+        // everything on its way past — including that offset. So writing the volume register moves
+        // the output all by itself, with no voice playing and nothing gated.
+        //
+        // That is not a quirk, it is a feature the whole era used: four bits of volume written at a
+        // few kilohertz is how a Commodore 64 plays a recording, and it is how Impossible Mission
+        // says "another visitor". Without the offset that write does nothing, because zero times
+        // anything is zero, and every game whose sound is samples plays in silence.
+        return (out + OUTPUT_OFFSET) * volume / 15.0
     }
 
     private fun updateFilter() {
@@ -186,9 +203,19 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
     }
 
     private fun emit(sample: Double) {
+        // There is a capacitor between the chip and the socket, so the standing part of that offset
+        // never reaches a speaker and only the changes in it do. Without this the whole signal would
+        // sit far off centre and spend most of its time against the clamp below.
+        if (!primed) {
+            primed = true
+            previousSample = sample
+        }
+        blocked = sample - previousSample + DC_BLOCK * blocked
+        previousSample = sample
+
         // Three voices at full envelope through the filter can reach a long way outside 16 bits;
         // clipping is what the real chip does too, just more gracefully.
-        val scaled = (sample * VOLUME_SCALE).toInt().coerceIn(-32768, 32767)
+        val scaled = (blocked * VOLUME_SCALE).toInt().coerceIn(-32768, 32767)
         val next = (writeIndex + 1) % OUTPUT_BUFFER
         if (next == readIndex) return // the consumer is behind; dropping is better than blocking
         output[writeIndex] = scaled.toShort()
@@ -213,6 +240,19 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
 
     private companion object {
         const val OUTPUT_BUFFER = 65536
+
+        /**
+         * The standing offset the master volume multiplies, in the same units as a voice — so a
+         * volume register swung from nothing to full moves the output about as far as one voice
+         * playing does, which is roughly where samples sit on a real machine.
+         */
+        const val OUTPUT_OFFSET = 0x800 * 255.0
+
+        /**
+         * How much of the last output the capacitor remembers. This works out at a corner somewhere
+         * below ten hertz, which removes the standing offset and nothing anybody can hear.
+         */
+        const val DC_BLOCK = 0.999
 
         /**
          * Maps the chip's internal scale onto 16-bit samples.

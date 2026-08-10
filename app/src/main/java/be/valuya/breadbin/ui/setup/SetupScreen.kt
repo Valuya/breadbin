@@ -128,6 +128,12 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
                 Text(stringResource(if (complete) R.string.setup_start else R.string.setup_start_free))
             }
 
+            // Above the fold, not below it. These used to sit at the bottom of the column, past
+            // seven list rows, which on a phone is off-screen: a file that was refused was refused
+            // silently as far as anybody could tell.
+            problem?.let { Body(it.resolve(), MaterialTheme.colorScheme.error) }
+            note?.let { Body(it.resolve()) }
+
             Section(stringResource(R.string.setup_section_roms))
             for (kind in RomKind.entries) {
                 RomRow(
@@ -183,10 +189,6 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
                 },
             )
 
-            problem?.let {
-                Body(it.resolve(), MaterialTheme.colorScheme.error)
-            }
-            note?.let { Body(it.resolve()) }
             Spacer(Modifier.height(24.dp))
         }
     }

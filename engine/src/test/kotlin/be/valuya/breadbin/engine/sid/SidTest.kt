@@ -135,6 +135,53 @@ class SidTest {
         assertTrue("oscillator 3 read back only ${seen.size} distinct values", seen.size > 16)
     }
 
+    /**
+     * A recording played through the volume register, with no voice gated and no waveform selected.
+     *
+     * This is not an exotic trick. Four bits of volume written at a few kilohertz is how a
+     * Commodore 64 plays a sample, and it is how Impossible Mission speaks. It works because the
+     * chip's output sits on a standing offset that the master volume multiplies on the way past —
+     * so the write moves the output on its own. Without that offset the whole thing is zero times
+     * something, and every game whose sound is samples plays in perfect silence.
+     */
+    @Test
+    fun `writing the volume register alone makes a sound`() {
+        val sid = sid()
+        var peak = 0
+        val buffer = ShortArray(rate)
+        // A square wave at about a kilohertz, written the way a sample player writes it.
+        repeat(200) { step ->
+            sid.write(0x18, if (step % 2 == 0) 0x0F else 0x00)
+            repeat(clock / 2000) { sid.clock() }
+        }
+        val produced = sid.readSamples(buffer, buffer.size)
+        for (i in 0 until produced) {
+            val level = abs(buffer[i].toInt())
+            if (level > peak) peak = level
+        }
+        assertTrue(
+            "the volume register moved nothing: peaked at %.1f%% of full scale".format(percent(peak)),
+            peak > 32767 / 20,
+        )
+    }
+
+    /** And the standing offset itself must not reach the speaker, only the changes in it. */
+    @Test
+    fun `a steady volume leaves no offset behind`() {
+        val sid = sid()
+        sid.write(0x18, 0x0F)
+        val buffer = ShortArray(rate)
+        repeat(clock / 4) { sid.clock() }
+        val produced = sid.readSamples(buffer, buffer.size)
+        // Look at the tail, past anything the filter is still settling from.
+        var worst = 0
+        for (i in produced / 2 until produced) {
+            val level = abs(buffer[i].toInt())
+            if (level > worst) worst = level
+        }
+        assertEquals("a constant volume is leaving a constant offset in the output", 0, worst)
+    }
+
     @Test
     fun `a write-only register reads back the last thing written`() {
         val sid = sid()
