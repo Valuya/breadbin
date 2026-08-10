@@ -11,17 +11,19 @@ import org.junit.Test
  */
 class RomsTest {
 
+    /**
+     * A KERNAL is mostly a jump table, so a plausible one has to have it — including when the
+     * question being asked is only about the revision byte. Handing those checks a blank file with
+     * one byte set tested a rule nothing enforces.
+     */
     private fun kernal(revisionByte: Int) = ByteArray(Roms.KERNAL_SIZE).also {
-        it[0xFF80 - 0xE000] = revisionByte.toByte()
-    }
-
-    /** A KERNAL is mostly a jump table, so a plausible one has to have it. */
-    private fun realisticKernal() = ByteArray(Roms.KERNAL_SIZE).also {
         for (entry in 0xFF81..0xFFEA step 3) it[entry - 0xE000] = 0x4C
         it[0x1FFC] = 0xE2.toByte()
         it[0x1FFD] = 0xFC.toByte()
-        it[0xFF80 - 0xE000] = 0x03
+        it[0xFF80 - 0xE000] = revisionByte.toByte()
     }
+
+    private fun realisticKernal() = kernal(0x03)
 
     private fun realisticBasic() = ByteArray(Roms.BASIC_SIZE).also {
         it[0] = 0x94.toByte(); it[1] = 0xE3.toByte()   // cold start $E394
@@ -89,6 +91,21 @@ class RomsTest {
         // Open ROMs has $F0 there, which is not a revision number anybody shipped.
         assertFalse(Roms.isCommodoreKernal(kernal(0xF0)))
         assertFalse("a file of the wrong size cannot be a KERNAL", Roms.isCommodoreKernal(ByteArray(100)))
+    }
+
+    /**
+     * The revision byte is one byte at one address, and other ROMs have bytes there too.
+     * Commodore's BASIC 901226-01 really does hold $03 at $FF80 — the value that means "KERNAL
+     * revision 3" — so asking only that question identified BASIC as a KERNAL.
+     */
+    @Test
+    fun `a BASIC with a revision byte that looks right is still not a KERNAL`() {
+        val basic = ByteArray(Roms.BASIC_SIZE).also {
+            it[0] = 0x94.toByte(); it[1] = 0xE3.toByte(); it[2] = 0x7B; it[3] = 0xE3.toByte()
+            it[0xFF80 - 0xE000] = 0x03
+        }
+        assertEquals(RomKind.BASIC, Roms.identify(basic))
+        assertFalse("Commodore's BASIC was taken for a KERNAL", Roms.isCommodoreKernal(basic))
     }
 
     /**
