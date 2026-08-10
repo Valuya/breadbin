@@ -104,4 +104,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
 
     testImplementation(libs.junit)
+    // Android provides org.json at runtime but stubs it in unit tests, so the real thing has to be
+    // on the test classpath for the response parsing to be testable at all.
+    testImplementation("org.json:json:20240303")
 }

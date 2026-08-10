@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,6 +67,7 @@ fun LibraryScreen(
     onOpen: (MediaItem) -> Unit,
     onBasic: () -> Unit,
     onSettings: () -> Unit,
+    onSearch: () -> Unit,
 ) {
     var items by remember { mutableStateOf(library.list()) }
     val snackbars = remember { SnackbarHostState() }
@@ -96,6 +98,9 @@ fun LibraryScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.library_title)) },
                 actions = {
+                    IconButton(onClick = onSearch) {
+                        Icon(Icons.Filled.Search, stringResource(R.string.library_search))
+                    }
                     IconButton(onClick = onBasic) {
                         Icon(Icons.Filled.Terminal, stringResource(R.string.library_basic))
                     }

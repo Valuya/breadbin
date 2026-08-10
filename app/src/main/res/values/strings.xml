@@ -114,4 +114,9 @@
     <string name="settings_use_free">Go back to the free ROMs</string>
     <string name="settings_about">About</string>
     <string name="settings_about_body">Breadbin is a Commodore 64 emulator. No ads, no tracking, no accounts. The only thing that ever opens a connection is the ROM import, and only when you type an address into it yourself.</string>
+    <string name="search_title">Find games</string>
+    <string name="search_field">Game name</string>
+    <string name="search_source">Searches the Internet Archive\'s Commodore 64 collection. Tapping a result downloads it into your library.</string>
+    <string name="search_nothing">Nothing found. Try fewer words.</string>
+    <string name="library_search">Find games online</string>
 </resources>

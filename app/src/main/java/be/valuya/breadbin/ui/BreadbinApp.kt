@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import be.valuya.breadbin.data.GameSearch
 import be.valuya.breadbin.data.MediaLibrary
 import be.valuya.breadbin.data.RomStore
 import be.valuya.breadbin.data.Settings
@@ -21,6 +22,7 @@ import be.valuya.breadbin.emu.SessionHolder
 import kotlinx.coroutines.launch
 import be.valuya.breadbin.ui.emulator.EmulatorScreen
 import be.valuya.breadbin.ui.library.LibraryScreen
+import be.valuya.breadbin.ui.search.SearchScreen
 import be.valuya.breadbin.ui.settings.SettingsScreen
 import be.valuya.breadbin.ui.setup.SetupScreen
 import java.net.URLDecoder
@@ -30,6 +32,7 @@ private const val LIBRARY = "library"
 private const val SETUP = "setup"
 private const val SETTINGS = "settings"
 private const val EMULATOR = "emulator"
+private const val SEARCH = "search"
 
 @Composable
 fun BreadbinApp(
@@ -50,6 +53,8 @@ fun BreadbinApp(
     // Which ROM set is in use has to be state rather than a lookup, or the settings screen goes on
     // reporting the old answer after the user has changed it.
     var romSource by remember { mutableStateOf(romStore.source) }
+
+    val gameSearch = remember(library) { GameSearch(library) }
 
     // The running machine lives here rather than in the emulator screen, so that going to the
     // settings and back does not restart the game.
@@ -97,6 +102,17 @@ fun BreadbinApp(
                 },
                 onBasic = { navController.navigate("$EMULATOR/-") },
                 onSettings = { navController.navigate(SETTINGS) },
+                onSearch = { navController.navigate(SEARCH) },
+            )
+        }
+
+        composable(SEARCH) {
+            SearchScreen(
+                search = gameSearch,
+                // The library reads itself off disk each time it is shown, so a download only has
+                // to land in the right directory for it to appear; nothing needs telling.
+                onAdded = { },
+                onBack = { navController.popBackStack() },
             )
         }
 
