@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -26,11 +27,14 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
@@ -43,6 +47,7 @@ import be.valuya.breadbin.data.GameFetchResult
 import be.valuya.breadbin.data.GameResult
 import be.valuya.breadbin.data.GameSearch
 import be.valuya.breadbin.data.GameSearchResult
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -64,30 +69,56 @@ fun SearchScreen(
     var searching by remember { mutableStateOf(false) }
     var fetching by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
-    var searched by remember { mutableStateOf(false) }
+    // The page last asked for, and what the Archive says the whole answer is, which is what decides
+    // whether there is any point asking again.
+    var page by remember { mutableIntStateOf(0) }
+    var total by remember { mutableIntStateOf(0) }
+    var loadingMore by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     val nothingFound = stringResource(R.string.search_nothing)
 
-    fun go() {
-        if (terms.isBlank() || searching) return
-        searching = true
-        message = null
+    /** Asks for one page: the first for a new search, the next when the list is running out. */
+    fun load(next: Boolean) {
+        if (terms.isBlank() || searching || loadingMore) return
+        val wanted = if (next) page + 1 else 1
+        if (next) loadingMore = true else searching = true
+        if (!next) message = null
         scope.launch {
-            when (val outcome = search.search(terms)) {
+            when (val outcome = search.search(terms, wanted)) {
                 is GameSearchResult.Found -> {
-                    results = outcome.results
-                    message = if (outcome.results.isEmpty()) nothingFound else null
+                    // Merged rather than appended: the Archive can return the same row on two pages
+                    // when download counts tie, and the list is keyed by identifier.
+                    results = if (next) GameSearch.merge(results, outcome.results) else outcome.results
+                    total = outcome.total
+                    page = wanted
+                    message = if (results.isEmpty()) nothingFound else null
                 }
                 is GameSearchResult.Failed -> {
-                    results = emptyList()
+                    // A failure part way down is not a reason to throw away what is already shown.
+                    if (!next) results = emptyList()
                     message = outcome.reason
                 }
             }
-            searched = true
             searching = false
+            loadingMore = false
         }
+    }
+
+    fun go() = load(next = false)
+
+    // More of the answer, fetched before the bottom is reached rather than at it, so that scrolling
+    // does not stop to wait. The Archive is asked only while it says there are more to come.
+    LaunchedEffect(listState, results.size, total) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .distinctUntilChanged()
+            .collect { last ->
+                if (last >= results.size - AHEAD && results.isNotEmpty() && results.size < total) {
+                    load(next = true)
+                }
+            }
     }
 
     Scaffold(
@@ -137,8 +168,17 @@ fun SearchScreen(
                 )
             }
 
+            if (results.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.search_count, results.size, total),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
+
             HorizontalDivider()
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                 items(results, key = { it.identifier }) { result ->
                     ListItem(
                         headlineContent = { Text(result.title) },
@@ -166,7 +206,22 @@ fun SearchScreen(
                         },
                     )
                 }
+                if (loadingMore) {
+                    item {
+                        Box(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { CircularProgressIndicator() }
+                    }
+                }
             }
         }
     }
 }
+
+/**
+ * How close to the end of the list to get before asking for the next page. Enough that the next
+ * one is usually there by the time the bottom arrives, and not so much that idly opening a search
+ * fetches half the collection.
+ */
+private const val AHEAD = 8

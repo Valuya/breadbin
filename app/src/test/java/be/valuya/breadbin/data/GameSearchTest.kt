@@ -105,6 +105,52 @@ class GameSearchTest {
     }
 
     @Test
+    fun `the total comes back so paging knows when to stop`() {
+        val total = GameSearch.parseTotal(fixture("archive-search.json"))
+        val shown = GameSearch.parseResults(fixture("archive-search.json")).size
+        assertTrue("no total in a real answer", total > 0)
+        assertTrue("the total ($total) is not more than the $shown asked for", total > shown)
+    }
+
+    /**
+     * The reason paging cannot simply append.
+     *
+     * Results are sorted by download count and a great many items are tied, so a row can sit on the
+     * boundary between two pages and be returned by both — pages 16 and 17 of a search for Boulder
+     * Dash really do share one. The list draws rows keyed by identifier, and a repeated key is not
+     * a cosmetic problem, it is a crash.
+     */
+    @Test
+    fun `a row returned on two pages is only kept once`() {
+        val first = listOf(result("a"), result("b"), result("c"))
+        val second = listOf(result("c"), result("d"))
+        val merged = GameSearch.merge(first, second)
+        assertEquals(listOf("a", "b", "c", "d"), merged.map { it.identifier })
+        assertEquals(
+            "a merged page has a repeated key",
+            merged.size,
+            merged.map { it.identifier }.toSet().size,
+        )
+    }
+
+    @Test
+    fun `merging keeps what was already there and its order`() {
+        val existing = listOf(result("a"), result("b"))
+        assertEquals(existing, GameSearch.merge(existing, emptyList()))
+        assertEquals(existing.map { it.identifier }, GameSearch.merge(existing, existing).map { it.identifier })
+        assertEquals(listOf("x"), GameSearch.merge(emptyList(), listOf(result("x"))).map { it.identifier })
+    }
+
+    /** A page that repeats itself internally must not get through either. */
+    @Test
+    fun `duplicates inside a single page are dropped too`() {
+        val merged = GameSearch.merge(emptyList(), listOf(result("a"), result("a"), result("b")))
+        assertEquals(listOf("a", "b"), merged.map { it.identifier })
+    }
+
+    private fun result(identifier: String) = GameResult(identifier, "Title $identifier", null)
+
+    @Test
     fun `rubbish from the network is a failure rather than a crash`() {
         for (body in listOf("", "not json", "{}", """{"response":{}}""", "[]")) {
             assertTrue(

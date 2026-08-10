@@ -15,7 +15,8 @@ data class GameResult(
 )
 
 sealed interface GameSearchResult {
-    data class Found(val results: List<GameResult>) : GameSearchResult
+    /** [total] is how many the Archive says there are altogether, not how many are in [results]. */
+    data class Found(val results: List<GameResult>, val total: Int) : GameSearchResult
     data class Failed(val reason: String) : GameSearchResult
 }
 
@@ -52,9 +53,9 @@ class GameSearch(private val library: MediaLibrary) {
         val body = fetch(address, SEARCH_MAXIMUM)?.toString(Charsets.UTF_8)
             ?: return@withContext GameSearchResult.Failed("Could not reach the Internet Archive")
 
-        val parsed = runCatching { parseResults(body) }.getOrNull()
+        val parsed = runCatching { parseResults(body) to parseTotal(body) }.getOrNull()
             ?: return@withContext GameSearchResult.Failed("The Internet Archive sent something unexpected")
-        GameSearchResult.Found(parsed)
+        GameSearchResult.Found(parsed.first, parsed.second)
     }
 
     /** Downloads the runnable file from one result and puts it in the library. */
@@ -175,6 +176,24 @@ class GameSearch(private val library: MediaLibrary) {
                 val title = doc.optString("title").takeIf { it.isNotBlank() } ?: identifier
                 GameResult(identifier, title, doc.optString("year").takeIf { it.isNotBlank() })
             }
+        }
+
+        /** How many the Archive says match altogether, which is what says whether to ask for more. */
+        fun parseTotal(body: String): Int =
+            JSONObject(body).getJSONObject("response").optInt("numFound", 0)
+
+        /**
+         * One page appended to what is already there, dropping anything already seen.
+         *
+         * Not defensive tidying: the Archive sorts by download count and a great many items are
+         * tied, so a row can sit on the boundary between two pages and be returned by both. Pages
+         * 16 and 17 of a search for Boulder Dash share one. The list draws rows keyed by identifier
+         * and a repeated key is a crash, so this is what stops the second page of a long search
+         * taking the screen down with it.
+         */
+        fun merge(existing: List<GameResult>, next: List<GameResult>): List<GameResult> {
+            val seen = existing.mapTo(HashSet()) { it.identifier }
+            return existing + next.filter { seen.add(it.identifier) }
         }
 
         /** The file names out of an item's metadata. */

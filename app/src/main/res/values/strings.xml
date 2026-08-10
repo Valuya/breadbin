@@ -119,4 +119,5 @@
     <string name="search_source">Searches the Internet Archive\'s Commodore 64 collection. Tapping a result downloads it into your library.</string>
     <string name="search_nothing">Nothing found. Try fewer words.</string>
     <string name="library_search">Find games online</string>
+    <string name="search_count">Showing %1$d of %2$d</string>
 </resources>
