@@ -2,9 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-      The only thing that uses this is the ROM import, and only when somebody types an address into
-      it and presses the button. Nothing else in the app opens a connection: there is no analytics,
-      no update check, no ads and nothing phoning home.
+      Two things use this, both started by somebody pressing a button and neither running
+      otherwise: fetching ROMs, and searching the Internet Archive for a game and downloading it.
+      Nothing else in the app opens a connection — no analytics, no update check, no ads, nothing
+      phoning home, and nothing at all while a game is running.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
 

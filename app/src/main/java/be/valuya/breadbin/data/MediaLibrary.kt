@@ -53,6 +53,15 @@ class MediaLibrary(private val context: Context) {
         val name = displayName(uri) ?: return emptyList()
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: return emptyList()
+        return add(name, bytes)
+    }
+
+    /**
+     * The same, for bytes that arrived some way other than the picker — a download, say. Zips are
+     * unpacked here too, because a game fetched from an archive is in one as often as a game
+     * picked off storage is.
+     */
+    fun add(name: String, bytes: ByteArray): List<MediaItem> {
         if (Zip.isZip(bytes)) {
             return Zip.entries(bytes).mapNotNull { store(it.fileName, it.bytes) }
         }
