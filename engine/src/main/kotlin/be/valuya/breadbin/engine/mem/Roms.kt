@@ -30,14 +30,6 @@ class Roms(
         private fun ByteArray.toUnsigned() = IntArray(size) { this[it].toInt() and 0xFF }
 
         /**
-         * What a ROM file looks like, so the setup screen can tell the user which of the three
-         * they just handed over instead of making them get the order right.
-         *
-         * The checks are deliberately shallow — a size and a couple of bytes — because plenty of
-         * perfectly good dumps differ from the ones Commodore shipped (a fixed KERNAL, a JiffyDOS
-         * replacement), and refusing those would be unhelpful.
-         */
-        /**
          * What a ROM is, in as much detail as it will admit to.
          *
          * A KERNAL says so itself: Commodore put the revision number at $FF80, which is the last
@@ -124,7 +116,11 @@ class Roms(
          * said so rather than filed under whatever it is nearest in size to.
          */
         fun identify(bytes: ByteArray): RomKind? = when {
-            bytes.size == DRIVE_SIZE && driveRomPassesSelfTest(bytes) -> RomKind.DRIVE
+            // Sixteen kilobytes is a drive ROM and nothing else we take, so it is identified on
+            // that alone. Whether it is a *sound* drive ROM is a separate question, asked when it
+            // is about to be used — folding the two together meant a DOS that failed its checksum
+            // was not merely unused but unimportable, and vanished without a word.
+            bytes.size == DRIVE_SIZE -> RomKind.DRIVE
             bytes.size == CHARACTER_SIZE && looksLikeCharacterSet(bytes) -> RomKind.CHARACTER
             bytes.size != KERNAL_SIZE -> null
             looksLikeKernal(bytes) -> RomKind.KERNAL

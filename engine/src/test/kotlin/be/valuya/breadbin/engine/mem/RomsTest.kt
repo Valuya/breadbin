@@ -57,8 +57,6 @@ class RomsTest {
         }
         assertEquals(null, Roms.identify(wrongVectors))
 
-        // A sixteen-kilobyte file that is not a drive ROM: it has to add up, not just be big.
-        assertEquals(null, Roms.identify(ByteArray(Roms.DRIVE_SIZE)))
 
         // And a four-kilobyte file with nothing in it is not a font.
         assertEquals(null, Roms.identify(ByteArray(Roms.CHARACTER_SIZE)))
@@ -108,6 +106,17 @@ class RomsTest {
         val fixed = repair(broken)
         assertTrue("a repaired ROM still does not add up", Roms.driveRomPassesSelfTest(fixed))
         assertFalse(Roms.describe(RomKind.DRIVE, fixed).contains("self-test"))
+    }
+
+    /**
+     * A drive ROM that does not add up is still a drive ROM. It is imported, and then not used,
+     * and the difference matters: refusing the import made it disappear silently, which is the
+     * worst of both.
+     */
+    @Test
+    fun `a drive ROM that fails its test is still identified as one`() {
+        assertEquals(RomKind.DRIVE, Roms.identify(ByteArray(Roms.DRIVE_SIZE)))
+        assertFalse(Roms.driveRomPassesSelfTest(ByteArray(Roms.DRIVE_SIZE)))
     }
 
     @Test
