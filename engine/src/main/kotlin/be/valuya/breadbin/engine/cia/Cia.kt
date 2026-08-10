@@ -94,9 +94,12 @@ class Cia(
         flagLine = level
     }
 
+    /** Set by diagnostics to see which registers a program actually looks at. Normally null. */
+    var onRead: ((Int) -> Unit)? = null
+
     fun read(register: Int): Int = when (register and 0x0F) {
-        0x0 -> ports.readPortA(this)
-        0x1 -> ports.readPortB(this)
+        0x0 -> { onRead?.invoke(0x0); ports.readPortA(this) }
+        0x1 -> { onRead?.invoke(0x1); ports.readPortB(this) }
         0x2 -> portADirection
         0x3 -> portBDirection
         0x4 -> timerA and 0xFF
