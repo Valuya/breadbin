@@ -236,5 +236,28 @@ class RomStore(private val context: Context) {
         /** The 1541's DOS lives with the other drives' rather than with the machine's. */
         const val WHERE_TO_GET_DRIVE_ROMS =
             "https://github.com/VICE-Team/svn-mirror/tree/main/vice/data/DRIVES"
+
+        private const val VICE_FILES =
+            "https://raw.githubusercontent.com/VICE-Team/svn-mirror/main/vice/data"
+
+        /**
+         * The set, and where each one is.
+         *
+         * There was an argument for not having this — that an app which knows an address for
+         * somebody else's ROMs is closer to handing them out than one which does not. The argument
+         * does not survive contact with what the app already did: it linked to this exact folder
+         * and had a box to paste an address into, so the address was already there, spelled out,
+         * one copy and paste away. The friction was not protecting anybody. It was only making the
+         * same thing take longer and read as though somebody else were responsible for it.
+         *
+         * So it is a button, and the dialog in front of it says plainly what these files are and
+         * whose decision it is.
+         */
+        val COMMODORE_ROM_SET = listOf(
+            "C64/basic-901226-01.bin",
+            "C64/kernal-901227-03.bin",
+            "C64/chargen-901225-01.bin",
+            "DRIVES/dos1541ii-251968-03.bin",
+        ).map { "$VICE_FILES/$it" }
     }
 }

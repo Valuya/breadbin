@@ -13,18 +13,45 @@ sealed interface RomDownloadResult {
     data class Failed(val reason: String) : RomDownloadResult
 }
 
+/** What a whole set came back as: which kinds arrived, and the name of anything that did not. */
+data class RomSetResult(val loaded: List<RomKind>, val failed: List<String>)
+
 /**
- * Fetches a ROM from an address the user types.
+ * Fetches ROMs over the network, either from an address the user types or from the known set.
  *
- * This is deliberately not a "get the ROMs" button with somewhere already in it. Breadbin does not
- * know where anybody's ROMs are and does not ship a pointer to a copy of somebody else's: what it
- * has is a way to bring in a file from a URL, the same as the file picker brings one in from
- * storage, and the address is the user's to supply and to be responsible for.
+ * This used to be only the first of those, on the reasoning that an app which knows an address for
+ * somebody else's ROMs is nearer to handing them out than one which does not. That reasoning did
+ * not survive looking at what the app already did: it linked to the exact folder these come from
+ * and offered a box to paste an address into. The address was already there and already spelled
+ * out. Making somebody copy it across by hand changed nothing except how long it took and who it
+ * appeared to be for, and dressing an identical outcome up as caution is worse than doing the thing
+ * and saying so.
  *
- * It is also the only thing in the app that touches the network, which is why the permission is
+ * It is still the only thing in the app that touches the network, which is why the permission is
  * there at all.
  */
 class RomDownload(private val store: RomStore) {
+
+    /**
+     * Fetches the whole set, carrying on past anything that fails: three missing ROMs are a
+     * different problem from one, and stopping at the first would hide which.
+     */
+    suspend fun fetchSet(addresses: List<String> = RomStore.COMMODORE_ROM_SET): RomSetResult {
+        val loaded = mutableListOf<RomKind>()
+        val failed = mutableListOf<String>()
+        for (address in addresses) {
+            when (val result = fetch(address)) {
+                is RomDownloadResult.Loaded -> loaded += result.kind
+                is RomDownloadResult.Failed -> failed += address.substringAfterLast('/')
+            }
+        }
+        // The drive's DOS arrives switched off. Turning it on swaps the drive written in Kotlin for
+        // an emulated 1541 running this code, which is a change in how every disk loads — worth
+        // having for fast loaders, not worth doing to somebody who pressed a button labelled "get
+        // the ROMs". The row says it is off and the switch is right there.
+        if (RomKind.DRIVE in loaded) store.setUsingSupplied(RomKind.DRIVE, false)
+        return RomSetResult(loaded, failed)
+    }
 
     suspend fun fetch(address: String): RomDownloadResult = withContext(Dispatchers.IO) {
         val url = runCatching { URL(address.trim()) }.getOrNull()
@@ -57,7 +84,9 @@ class RomDownload(private val store: RomStore) {
 
         val kind = Roms.identify(bytes)
             ?: return@withContext RomDownloadResult.Failed("That file is not a C64 ROM")
-        store.accept(bytes, kind)
+        // The last part of the path is a good enough name to show against the row, and knowing
+        // which file a ROM came out of is most of what makes the setup screen worth reading.
+        store.accept(bytes, kind, url.path.substringAfterLast('/').ifBlank { null })
         RomDownloadResult.Loaded(kind)
     }
 

@@ -7,6 +7,14 @@
     <string name="setup_limit">Commodore\'s own ROMs are worth adding. Games of the era jump straight into the KERNAL as often as they call it, and the free ROMs are a rewrite that does not have the same code at the same addresses — so a game that halts or misbehaves on them will usually run on Commodore\'s. The KERNAL you want is revision 3, 901227-03.</string>
     <string name="setup_where">VICE\'s ROM folder: basic-901226-01, kernal-901227-03, chargen-901225-01. Open one, tap Raw to download it, then add it with Choose files above.</string>
     <string name="setup_open_drive">Where to get the 1541 DOS</string>
+    <string name="setup_get_set">Get Commodore\'s ROMs</string>
+    <string name="setup_get_set_hint">BASIC, KERNAL, character set and the 1541 DOS, in one go</string>
+    <string name="setup_get_set_title">Download Commodore\'s ROMs</string>
+    <string name="setup_get_set_body">Breadbin will fetch four files from the VICE project\'s public repository: Commodore\'s BASIC 901226-01, KERNAL 901227-03 and character generator 901225-01, and the 1541\'s DOS.\n\nThese are Commodore\'s firmware from 1982 and 1983. They are still under copyright, nobody has ever released them, and they have been carried by emulator projects for about thirty years without anyone objecting. Whether you may use them is your call.\n\nThe 1541 DOS arrives switched off — turn it on for fast loaders.</string>
+    <string name="setup_get_set_go">Download</string>
+    <string name="setup_get_set_working">Fetching…</string>
+    <string name="setup_set_done">Downloaded %1$s of 4.</string>
+    <string name="setup_set_failed">Could not fetch: %1$s</string>
     <string name="setup_where_drive">The same project\'s drive ROM folder. Optional — disks load without it.</string>
     <string name="setup_open_vice">Where to get them</string>
     <string name="setup_start_free">Start with the free ROMs</string>
