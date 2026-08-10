@@ -86,16 +86,42 @@ class ZipTest {
     fun `a ROM set in an archive is picked apart correctly`() {
         val archive = zip(
             "readme.txt" to "where these came from".toByteArray(),
-            "roms/basic.901226-01.bin" to ByteArray(Roms.BASIC_SIZE),
-            "roms/kernal.901227-03.bin" to ByteArray(Roms.KERNAL_SIZE).also { it[0x1FFD] = 0xFC.toByte() },
-            "roms/characters.901225-01.bin" to ByteArray(Roms.CHARACTER_SIZE),
-            "roms/1541.dos" to ByteArray(Roms.DRIVE_SIZE),
+            "roms/basic.901226-01.bin" to basic(),
+            "roms/kernal.901227-03.bin" to kernal(),
+            "roms/characters.901225-01.bin" to characterSet(),
+            "roms/1541.dos" to driveRom(),
         )
         val kinds = Zip.entries(archive).mapNotNull { Roms.identify(it.bytes) }
         assertEquals(
             setOf(RomKind.BASIC, RomKind.KERNAL, RomKind.CHARACTER, RomKind.DRIVE),
             kinds.toSet(),
         )
+    }
+
+    // ROMs have to look like themselves now, so the fixtures do too.
+    private fun kernal() = ByteArray(Roms.KERNAL_SIZE).also {
+        for (entry in 0xFF81..0xFFEA step 3) it[entry - 0xE000] = 0x4C
+        it[0x1FFC] = 0xE2.toByte()
+        it[0x1FFD] = 0xFC.toByte()
+    }
+
+    private fun basic() = ByteArray(Roms.BASIC_SIZE).also {
+        it[0] = 0x94.toByte(); it[1] = 0xE3.toByte(); it[2] = 0x7B; it[3] = 0xE3.toByte()
+    }
+
+    private fun characterSet() = ByteArray(Roms.CHARACTER_SIZE) { (it * 37).toByte() }
+
+    /** Sixteen kilobytes that add up the way the drive insists on. */
+    private fun driveRom(): ByteArray {
+        val rom = ByteArray(Roms.DRIVE_SIZE)
+        for (v in 0..255) {
+            rom[0xFEE6 - 0xC000] = v.toByte()
+            for (w in 0..255) {
+                rom[0] = w.toByte()
+                if (Roms.driveRomPassesSelfTest(rom)) return rom
+            }
+        }
+        error("could not build a drive ROM that passes its own test")
     }
 
     @Test
