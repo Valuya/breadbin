@@ -1,6 +1,7 @@
 package be.valuya.breadbin.engine.cia
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -140,5 +141,36 @@ class KeyboardTest {
         keyboard.setJoystick(JoystickPort.ONE, up = false, down = false, left = false, right = true, fire = true)
         // Right is bit 3, fire is bit 4, and both are active low.
         assertEquals(0xFF and 0x08.inv() and 0x10.inv(), scan(0))
+    }
+
+    /**
+     * The one that matters off the desktop, and the one no ordinary test can see.
+     *
+     * Every test in this file drives both sides from one thread. The app does not: the finger is on
+     * one thread and the processor is on another, reading these in a tight loop that touches
+     * nothing else. A plain field there may be loaded once and kept in a register for good, and
+     * then the joystick moves and the emulated machine never finds out — which is exactly what was
+     * reported, and why the keyboard appeared to work while the stick did not. The matrix is an
+     * array, whose loads are not hoisted so eagerly, so it got away with it.
+     *
+     * Asserting on the declaration rather than racing two threads makes this deterministic. A race
+     * test would pass on a good day with the bug present, which is worse than no test at all.
+     */
+    @Test
+    fun `the state the UI writes is safely published to the emulation thread`() {
+        val joystickOne = Keyboard::class.java.getDeclaredField("joystick1")
+        val joystickTwo = Keyboard::class.java.getDeclaredField("joystick2")
+        for (field in listOf(joystickOne, joystickTwo)) {
+            assertTrue(
+                "${field.name} is not volatile, so a moved joystick may never be seen",
+                java.lang.reflect.Modifier.isVolatile(field.modifiers),
+            )
+        }
+        val matrix = Keyboard::class.java.getDeclaredField("matrix")
+        assertEquals(
+            "the key matrix is a plain array, which carries no promise across threads",
+            java.util.concurrent.atomic.AtomicIntegerArray::class.java,
+            matrix.type,
+        )
     }
 }

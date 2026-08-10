@@ -42,31 +42,47 @@ enum class JoystickPort { ONE, TWO }
  */
 class Keyboard : CiaPorts {
 
-    /** One bit per column, per row: set means the key is down. */
-    private val matrix = IntArray(8)
+    /**
+     * One bit per column, per row: set means the key is down.
+     *
+     * Atomic rather than a plain array for the same reason the joysticks are volatile — it is
+     * written by the thread with the user's finger on it and read by the one running the processor,
+     * and a plain array carries no promise that the second ever sees what the first wrote. Each
+     * read is an ordinary load on every machine this runs on, and port reads happen a few thousand
+     * times a second rather than a few million, so it costs nothing worth measuring.
+     */
+    private val matrix = java.util.concurrent.atomic.AtomicIntegerArray(8)
 
     /**
      * What each joystick is pulling down, as a mask over the whole port: a zero bit is a direction
      * or a button being held. Only the bottom five bits belong to the stick, and the other three
      * have to stay set — they carry keyboard lines, and a stick that quietly held them low would
      * jam a third of the keyboard down for ever.
+     *
+     * Volatile, and that is not a formality. These are written by whichever thread has the user's
+     * finger on it and read by the one running the processor, several million times a second in a
+     * loop that does nothing else to them. Without this a compiler is entitled to load them once
+     * and keep them in a register for ever, and it does: the joystick moves, the field changes, and
+     * the emulated machine goes on reading the value it cached before anybody touched anything. It
+     * is a bug that cannot happen in a test, because a test drives both sides from one thread.
      */
-    private var joystick1 = 0xFF
-    private var joystick2 = 0xFF
+    @Volatile private var joystick1 = 0xFF
+
+    @Volatile private var joystick2 = 0xFF
 
     fun press(key: C64Key) {
-        matrix[key.row] = matrix[key.row] or (1 shl key.column)
+        matrix.updateAndGet(key.row) { it or (1 shl key.column) }
     }
 
     fun release(key: C64Key) {
-        matrix[key.row] = matrix[key.row] and (1 shl key.column).inv()
+        matrix.updateAndGet(key.row) { it and (1 shl key.column).inv() }
     }
 
     fun releaseAll() {
-        java.util.Arrays.fill(matrix, 0)
+        for (row in 0 until 8) matrix.set(row, 0)
     }
 
-    fun isPressed(key: C64Key) = matrix[key.row] and (1 shl key.column) != 0
+    fun isPressed(key: C64Key) = matrix.get(key.row) and (1 shl key.column) != 0
 
     /**
      * Sets a joystick direction or the fire button. The five lines are active low, which the
@@ -97,7 +113,7 @@ class Keyboard : CiaPorts {
         val columns = cia.portB
         for (row in 0 until 8) {
             // Any key in this row whose column is being held low shorts this row's line down.
-            if (matrix[row] and columns.inv() and 0xFF != 0) value = value and (1 shl row).inv()
+            if (matrix.get(row) and columns.inv() and 0xFF != 0) value = value and (1 shl row).inv()
         }
         return value and 0xFF
     }
@@ -107,7 +123,7 @@ class Keyboard : CiaPorts {
         var value = cia.portB and joystick1
         val rows = cia.portA
         for (row in 0 until 8) {
-            if (rows and (1 shl row) == 0) value = value and matrix[row].inv()
+            if (rows and (1 shl row) == 0) value = value and matrix.get(row).inv()
         }
         return value and 0xFF
     }

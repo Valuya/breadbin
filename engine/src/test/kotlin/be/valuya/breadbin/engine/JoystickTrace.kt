@@ -1,5 +1,6 @@
 package be.valuya.breadbin.engine
 
+import be.valuya.breadbin.engine.cia.C64Key
 import be.valuya.breadbin.engine.cia.JoystickPort
 import be.valuya.breadbin.engine.disk.D64
 import be.valuya.breadbin.engine.mem.Roms
@@ -10,9 +11,10 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Not a test: runs a game and reports which joystick port it is actually reading.
+ * Not a test: runs a game and reports what it sees when the joystick moves.
  *
- * BREADBIN_ROMS and BREADBIN_GAME, as the others.
+ * BREADBIN_ROMS and BREADBIN_GAME, as the others. BREADBIN_VIA_DRIVE loads through the drive rather
+ * than injecting, which is what the app does and takes minutes of machine time.
  */
 class JoystickTrace {
 
@@ -40,60 +42,73 @@ class JoystickTrace {
                     else -> " "
                 }
             }.trimEnd()
-        }
+        }.lines().filter { it.isNotBlank() }.joinToString("\n") { "  |$it" }
 
     @Test
-    fun `which port does it read`() {
+    fun `what the game sees when the stick moves`() {
         val roms = roms()
         val game = System.getenv("BREADBIN_GAME")?.let(::File)?.takeIf { it.isFile }
         assumeTrue(roms != null && game != null)
 
         val machine = Machine(roms!!)
         val raw = game!!.readBytes()
+        val viaDrive = System.getenv("BREADBIN_VIA_DRIVE") != null
         val program = if (game.name.endsWith(".t64", true)) {
             T64.entries(raw).first()
         } else {
             val disk = D64(raw)
             machine.insertDisk(disk)
             val entry = disk.directory().first { it.blocks > 0 }
-            val bytes = disk.readFile(entry)
-            Program.fromPrg(ByteArray(bytes.size) { bytes[it].toByte() }, "game")
+            Program.fromPrg(disk.readFile(entry).let { b -> ByteArray(b.size) { b[it].toByte() } }, "game")
         }
-        machine.enqueue(program, run = true)
+        if (viaDrive) machine.autostartDisk() else machine.enqueue(program, run = true)
 
-        // Counting the reads is the direct answer: a game polling a port reads it every frame, and
-        // a game ignoring one never touches it at all.
-        var portA = 0
-        var portB = 0
-        machine.cia1.onRead = { register ->
-            if (register == 0x00) portA++
-            if (register == 0x01) portB++
-        }
-
-        // driveBusy keeps the app in turbo, and turbo throws every sample away. If it never settles
-        // the game is silent for ever and nobody can tell why.
+        // Whether the app would be running flat out. Turbo is what makes a load bearable, and it is
+        // driven entirely by this, so a load that is slow is a load where this is false.
         val busy = StringBuilder()
-        repeat(900) { frame ->
+        val settle = System.getenv("BREADBIN_FRAMES")?.toIntOrNull() ?: 1000
+        repeat(settle) { frame ->
             machine.runFrame()
             if (frame % 50 == 0) busy.append(if (machine.driveBusy) 'B' else '.')
+            if (frame % 1000 == 999) {
+                println("--- at ${(frame + 1) / 50}s, driveBusy=${machine.driveBusy} ---")
+                println(screen(machine).lines().take(4).joinToString("\n"))
+            }
         }
-        println("driveBusy per second: $busy")
-        println("=== after ${900 / 50}s ===")
-        println("reads of \$DC00 (port two): $portA")
-        println("reads of \$DC01 (port one, and the keyboard): $portB")
-        println(screen(machine).lines().filter { it.isNotBlank() }.joinToString("\n") { "  |$it" })
+        println("driveBusy, one character per second: $busy")
+        println("=== screen after ${settle / 50}s ===")
+        println(screen(machine))
+
+        // Past the menu, which wants a key rather than the stick.
+        machine.keyboard.press(C64Key.F1)
+        repeat(10) { machine.runFrame() }
+        machine.keyboard.release(C64Key.F1)
+        repeat(200) { machine.runFrame() }
+        println("=== after F1 ===")
+        println(screen(machine))
 
         for (port in listOf(JoystickPort.TWO, JoystickPort.ONE)) {
             val before = screen(machine)
-            machine.keyboard.setJoystick(port, up = false, down = false, left = false, right = false, fire = true)
-            repeat(150) { machine.runFrame() }
-            machine.keyboard.setJoystick(port, up = false, down = false, left = false, right = false, fire = false)
-            repeat(150) { machine.runFrame() }
-            val after = screen(machine)
-            println("=== fire on port $port: screen ${if (before == after) "did not change" else "CHANGED"} ===")
-            if (before != after) {
-                println(after.lines().filter { it.isNotBlank() }.take(6).joinToString("\n") { "  |$it" })
+            // What the program actually reads while the button is held. If the bit never goes low
+            // the joystick is not reaching it; if it does and nothing happens, it is looking
+            // somewhere else entirely.
+            val seenA = LinkedHashSet<Int>()
+            val seenB = LinkedHashSet<Int>()
+            machine.cia1.onReadValue = { register, value ->
+                if (register == 0x00 && seenA.size < 8) seenA += value
+                if (register == 0x01 && seenB.size < 8) seenB += value
             }
+            machine.keyboard.setJoystick(port, up = false, down = false, left = false, right = false, fire = true)
+            repeat(300) { machine.runFrame() }
+            machine.keyboard.setJoystick(port, up = false, down = false, left = false, right = false, fire = false)
+            machine.cia1.onReadValue = null
+            repeat(100) { machine.runFrame() }
+
+            println("=== fire held on port $port ===")
+            println("  \$DC00 read as: " + seenA.joinToString(" ") { "%02X".format(it) })
+            println("  \$DC01 read as: " + seenB.joinToString(" ") { "%02X".format(it) })
+            println("  screen " + if (before == screen(machine)) "did not change" else "CHANGED")
+            if (before != screen(machine)) println(screen(machine))
         }
     }
 }
