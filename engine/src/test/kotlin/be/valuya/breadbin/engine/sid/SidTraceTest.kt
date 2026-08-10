@@ -58,7 +58,14 @@ class SidTraceTest {
             writes[register]++
             if (distinct[register].size < 40) distinct[register] += value
         }
-        machine.enqueue(program, run = true)
+        // The app loads a disk through the drive rather than injecting it, and a game can behave
+        // differently depending on how it got there — a loader that is skipped by injection is a
+        // loader that never installs whatever it installs.
+        if (System.getenv("BREADBIN_VIA_DRIVE") != null) {
+            machine.autostartDisk()
+        } else {
+            machine.enqueue(program, run = true)
+        }
 
         // What actually reaches the speaker, measured in one-second windows so a tune that starts
         // late is not averaged away by the silence before it.
@@ -69,7 +76,8 @@ class SidTraceTest {
         var windowCount = 0
         var windowPeak = 0
         val seconds = ArrayList<Triple<Int, Double, Int>>()
-        while (frames++ < 1200) {
+        val limit = System.getenv("BREADBIN_FRAMES")?.toIntOrNull() ?: 1200
+        while (frames++ < limit) {
             machine.runFrame()
             while (true) {
                 val got = machine.sid.readSamples(buffer, buffer.size)
@@ -93,6 +101,16 @@ class SidTraceTest {
             val bar = "#".repeat((peak / 1000).coerceAtMost(33))
             val registerWrites = perSecond.getOrElse(second - 1) { 0 }
             println("%3ds  %5d writes  rms %8.1f  peak %6d  %s".format(second, registerWrites, rms, peak, bar))
+        }
+
+        println("=== screen at the end ===")
+        for (row in 0 until 25) {
+            val line = (0 until 40).joinToString("") { column ->
+                val code = machine.memory.peek(0x0400 + row * 40 + column) and 0x7F
+                when (code) { 0 -> "@"; in 1..26 -> ('A' + code - 1).toString()
+                    in 32..63 -> code.toChar().toString(); else -> " " }
+            }.trimEnd()
+            if (line.isNotBlank()) println("  |$line")
         }
 
         val shortcut = machine.kernalInternalJump

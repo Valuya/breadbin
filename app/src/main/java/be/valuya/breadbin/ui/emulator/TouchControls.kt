@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.sqrt
 
 /** What the stick and the button are doing at this instant. */
 data class JoystickState(
@@ -121,19 +122,33 @@ fun TouchControls(
         ) {
             val stickCentre = Offset(margin + stickRadius, size.height - margin - stickRadius)
             val fireCentre = Offset(size.width - margin - fireRadius, size.height - margin - fireRadius)
-            val ink = Color.White.copy(alpha = opacity)
-            val fill = Color.Black.copy(alpha = opacity * 0.35f)
+            // Everything is drawn twice: a dark halo, then a bright line on top of it. A single
+            // white line at half opacity is what these were, and on a game that is mostly black —
+            // which is most of them — a grey line on black is very nearly nothing at all. Two
+            // passes cost nothing and read against a night sky and a white loading screen alike.
+            //
+            // The slider still reaches nothing at all at zero, because a control you can hide is
+            // the point of having the slider. What changes is the middle of its range: alpha rises
+            // as the square root, so halfway along is two thirds opaque rather than half.
+            val strength = sqrt(opacity.coerceIn(0f, 1f))
+            val ink = Color.White.copy(alpha = strength)
+            val halo = Color.Black.copy(alpha = strength * 0.75f)
+            // A faint light wash rather than a dark one: the point is to lift the inside of the
+            // ring off a black background, and black on black lifts nothing.
+            val fill = Color.White.copy(alpha = strength * 0.14f)
+
+            fun ring(radius: Float, centre: Offset) {
+                drawCircle(halo, radius, centre, style = Stroke(width = HALO_WIDTH))
+                drawCircle(ink, radius, centre, style = Stroke(width = LINE_WIDTH))
+            }
 
             drawCircle(fill, stickRadius, stickCentre)
-            drawCircle(ink, stickRadius, stickCentre, style = Stroke(width = 3f))
-            drawCircle(ink.copy(alpha = opacity * 0.9f), knobRadius, stickCentre + knob)
+            ring(stickRadius, stickCentre)
+            drawCircle(halo, knobRadius + HALO_WIDTH / 2f, stickCentre + knob)
+            drawCircle(ink, knobRadius, stickCentre + knob)
 
-            drawCircle(
-                if (state.fire) ink.copy(alpha = opacity) else fill,
-                fireRadius,
-                fireCentre,
-            )
-            drawCircle(ink, fireRadius, fireCentre, style = Stroke(width = 3f))
+            drawCircle(if (state.fire) ink else fill, fireRadius, fireCentre)
+            ring(fireRadius, fireCentre)
         }
     }
 }
@@ -155,3 +170,7 @@ private fun directionOf(offset: Offset, radius: Float): JoystickState {
         right = offset.x > threshold,
     )
 }
+
+/** The bright line, and the dark one under it that makes the bright one visible on anything. */
+private const val LINE_WIDTH = 4f
+private const val HALO_WIDTH = 10f
