@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.OpenInNew
@@ -66,10 +67,13 @@ import kotlinx.coroutines.launch
  * same shapes as the settings screen next door, because that is what the platform has already
  * taught everybody how to read.
  *
- * What it says has not changed. The app ships free replacement ROMs and starts on them immediately;
- * Commodore's own are better and there are three ways to bring them in. The address is the user's
- * to supply: an app carrying a pointer to a copy of somebody else's ROMs is distributing them,
- * where one that fetches from an address you type is a tool you pointed somewhere.
+ * The app ships free replacement ROMs and starts on them immediately; Commodore's own are better,
+ * and getting them is one button with a dialog in front of it that says what they are and whose
+ * decision it is. It used to be a link and a box to paste an address into, on the reasoning that a
+ * tool you point somewhere is different from one that already knows where to go. Since the link
+ * went to the folder and the address was printed on the row, the difference was in the wording
+ * rather than in what happened, and the file picker and the address box are still here for anyone
+ * who would rather do it another way.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +85,7 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
     var problem by remember { mutableStateOf<Message?>(null) }
     var note by remember { mutableStateOf<Message?>(null) }
     var showDownload by remember { mutableStateOf(false) }
+    var showGetSet by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf("") }
     var fetching by remember { mutableStateOf(false) }
 
@@ -167,6 +172,17 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
             }
 
             Section(stringResource(R.string.setup_section_add))
+            // First, because it is what almost everybody wants and the rest are the ways round it.
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setup_get_set)) },
+                supportingContent = { Text(stringResource(R.string.setup_get_set_hint)) },
+                leadingContent = { Icon(Icons.Filled.CloudDownload, null) },
+                modifier = Modifier.clickable {
+                    problem = null
+                    note = null
+                    showGetSet = true
+                },
+            )
             ListItem(
                 headlineContent = { Text(stringResource(R.string.setup_pick)) },
                 supportingContent = { Text(stringResource(R.string.setup_pick_hint)) },
@@ -204,6 +220,55 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (showGetSet) {
+        AlertDialog(
+            onDismissRequest = { if (!fetching) showGetSet = false },
+            title = { Text(stringResource(R.string.setup_get_set_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.setup_get_set_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (fetching) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.height(18.dp).width(18.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(stringResource(R.string.setup_get_set_working))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !fetching,
+                    onClick = {
+                        fetching = true
+                        scope.launch {
+                            val result = download.fetchSet()
+                            note = Message.Resource(
+                                R.string.setup_set_done,
+                                result.loaded.size.toString(),
+                            )
+                            problem = result.failed
+                                .takeIf { it.isNotEmpty() }
+                                ?.let { Message.Resource(R.string.setup_set_failed, it.joinToString(", ")) }
+                            fetching = false
+                            showGetSet = false
+                            version++
+                        }
+                    },
+                ) { Text(stringResource(R.string.setup_get_set_go)) }
+            },
+            dismissButton = {
+                TextButton(enabled = !fetching, onClick = { showGetSet = false }) {
+                    Text(stringResource(R.string.setup_cancel))
+                }
+            },
+        )
     }
 
     if (showDownload) {
