@@ -169,4 +169,34 @@ class RomsTest {
             Roms.describe(RomKind.CHARACTER, ByteArray(Roms.CHARACTER_SIZE) { it.toByte() }),
         )
     }
+
+    /**
+     * Half of one set and half of the other is not a machine.
+     *
+     * Not hypothetical caution. Rejecting a wrongly-filed BASIC — which was the right thing to do —
+     * left a user with Commodore's KERNAL, no BASIC, and so the free BASIC underneath it, and that
+     * pairing boots to nothing at all. The switches say what somebody wants; this says what they
+     * can actually be given.
+     */
+    @Test
+    fun `BASIC and the KERNAL are only ever taken together`() {
+        fun only(vararg on: RomKind): (RomKind) -> Boolean = { it in on }
+
+        assertTrue(romInUse(RomKind.BASIC, only(RomKind.BASIC, RomKind.KERNAL)))
+        assertTrue(romInUse(RomKind.KERNAL, only(RomKind.BASIC, RomKind.KERNAL)))
+
+        assertFalse("a KERNAL without a BASIC was used", romInUse(RomKind.KERNAL, only(RomKind.KERNAL)))
+        assertFalse("a BASIC without a KERNAL was used", romInUse(RomKind.BASIC, only(RomKind.BASIC)))
+        // And the half that is switched on is held back too, not merely its missing partner.
+        assertFalse(romInUse(RomKind.BASIC, only(RomKind.KERNAL)))
+    }
+
+    @Test
+    fun `the character set and the drive ROM stand on their own`() {
+        fun only(vararg on: RomKind): (RomKind) -> Boolean = { it in on }
+        // Glyphs call into nothing and the drive is another computer, so neither waits for BASIC.
+        assertTrue(romInUse(RomKind.CHARACTER, only(RomKind.CHARACTER)))
+        assertTrue(romInUse(RomKind.DRIVE, only(RomKind.DRIVE)))
+        assertFalse(romInUse(RomKind.CHARACTER, only(RomKind.BASIC, RomKind.KERNAL)))
+    }
 }
