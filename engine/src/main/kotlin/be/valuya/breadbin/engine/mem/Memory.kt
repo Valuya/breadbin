@@ -49,6 +49,13 @@ class Memory(private val roms: Roms) {
 
     private var basicVisible = true
     private var kernalVisible = true
+
+    /** Whether a jump to $E000 or above lands in the KERNAL rather than in the RAM beneath it. */
+    val kernalIsVisible get() = kernalVisible
+
+    /** The same question for $A000..$BFFF and BASIC. */
+    val basicIsVisible get() = basicVisible
+
     private var charVisible = false
     private var ioVisible = true
     private var romlVisible = false
