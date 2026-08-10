@@ -95,6 +95,12 @@ class SidTraceTest {
             println("%3ds  %5d writes  rms %8.1f  peak %6d  %s".format(second, registerWrites, rms, peak, bar))
         }
 
+        val shortcut = machine.kernalInternalJump
+        println(
+            if (shortcut == null) "no jump into the KERNAL's private half"
+            else "jumped into the KERNAL at $%04X — this game wants Commodore's ROMs".format(shortcut)
+        )
+
         println("=== SID writes over $frames frames (${frames / 50} seconds of machine time) ===")
         for (register in 0 until 0x20) {
             if (writes[register] == 0) continue

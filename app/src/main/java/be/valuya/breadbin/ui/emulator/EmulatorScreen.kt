@@ -91,6 +91,9 @@ fun EmulatorScreen(
     // machine is built from are in the key; changing the sound or the joystick size is not one.
     val missingNotice = stringResource(R.string.emulator_missing)
     val stoppedNotice = stringResource(R.string.emulator_stopped)
+    // Read whole and formatted below rather than through a context: the address is only
+    // known once the machine has stopped, which is long after composition.
+    val stoppedShortcutNotice = stringResource(R.string.emulator_stopped_shortcut)
     val driveRom = remember { romStore.loadDrive() }
     val session = remember(settings.model, item?.file?.path) {
         holder.obtain(settings.model.name + ":" + item?.file?.path) {
@@ -307,8 +310,16 @@ fun EmulatorScreen(
     }
 
     // A halted processor looks exactly like a hung emulator, and the usual cause has a fix.
-    LaunchedEffect(session.stopped) {
-        if (session.stopped && romStore.source == RomSource.BUNDLED) notice = stoppedNotice
+    //
+    // The shortcut on its own is deliberately not worth saying anything about: most software of the
+    // period calls into the KERNAL's private half and a great deal of it works anyway — Boulder
+    // Dash goes through $FEBC and plays fine. It is worth raising once something has actually gone
+    // wrong, and then it is the whole explanation rather than a guess.
+    LaunchedEffect(session.stopped, session.kernalShortcut) {
+        if (!session.stopped || romStore.source != RomSource.BUNDLED) return@LaunchedEffect
+        val shortcut = session.kernalShortcut
+        notice = if (shortcut == null) stoppedNotice
+        else stoppedShortcutNotice.format("%04X".format(shortcut))
     }
 
     // A disk transfers at the speed a real 1541 managed, so a game is the better part of a minute

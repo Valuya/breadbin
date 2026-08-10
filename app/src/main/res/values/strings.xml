@@ -104,6 +104,7 @@
     <string name="settings_autostart">Start programs automatically</string>
     <string name="emulator_loading">Loading…</string>
     <string name="emulator_stopped">The program has stopped the processor.\n\nGames of this era often jump straight into the KERNAL rather than calling it, and the free ROMs are a rewrite that does not have the same code in the same places. Adding Commodore\'s own KERNAL in Settings usually fixes it.</string>
+    <string name="emulator_stopped_shortcut">The program has stopped the processor, after jumping into the KERNAL at $%1$s.\n\nThat address is inside the KERNAL rather than one of its published entry points, so it holds Commodore\'s own code and something else entirely in the free replacement. This is the usual reason a game of this era stops dead.\n\nGet Commodore\'s ROMs in Settings and it will very likely run.</string>
     <string name="emulator_missing">That file is no longer in the library.</string>
     <string name="settings_autostart_hint">Types the LOAD and RUN for you when a disk or program is opened.</string>
     <string name="settings_roms">ROMs</string>

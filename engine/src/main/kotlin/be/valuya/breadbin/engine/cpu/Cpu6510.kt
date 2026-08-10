@@ -96,8 +96,18 @@ class Cpu6510(private val bus: Bus) {
             return
         }
         interruptDisableSampled = interruptDisable
+        instructionAt = pc
         execute(readPc())
     }
+
+    /** Where the instruction being executed began, so a jump can say where it came from. */
+    private var instructionAt = 0
+
+    /**
+     * Told about every JMP and JSR, as (from, to). Null unless something is watching, which in
+     * practice means the machine looking out for programs that jump into the middle of the KERNAL.
+     */
+    var jumpWatcher: ((Int, Int) -> Unit)? = null
 
     /**
      * Unwinds a JSR the way an RTS would. The KERNAL patches use it to return from a trapped
@@ -417,12 +427,13 @@ class Cpu6510(private val bus: Bus) {
             0x01 -> { a = a or bus.read(indexedIndirect()); setNz(a) }
             0x11 -> { a = a or bus.read(indirectIndexedRead()); setNz(a) }
 
-            0x4C -> pc = absolute()
+            0x4C -> { pc = absolute(); jumpWatcher?.invoke(instructionAt, pc) }
             0x6C -> { // JMP indirect, with the famous page-boundary bug
                 val pointer = absolute()
                 val lo = bus.read(pointer)
                 val hi = bus.read((pointer and 0xFF00) or ((pointer + 1) and 0xFF))
                 pc = lo or (hi shl 8)
+                jumpWatcher?.invoke(instructionAt, pc)
             }
             0x20 -> { // JSR
                 val lo = readPc()
@@ -430,6 +441,7 @@ class Cpu6510(private val bus: Bus) {
                 push(pc shr 8)
                 push(pc and 0xFF)
                 pc = lo or (readPc() shl 8)
+                jumpWatcher?.invoke(instructionAt, pc)
             }
             0x40 -> { // RTI
                 bus.read(pc)

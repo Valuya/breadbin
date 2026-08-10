@@ -81,6 +81,19 @@ class EmulatorSession(
      */
     var stopped by mutableStateOf(false)
         private set
+
+    /**
+     * The address, if any, at which the running program called into the KERNAL's private half.
+     *
+     * Not a fault on its own, and it must not be reported as one: most software of the period did
+     * this, and plenty of it carries on working anyway — Boulder Dash goes through $FEBC on its way
+     * to the interrupt exit and plays perfectly on the free ROMs. What it is good for is saying
+     * *why* when something has actually gone wrong, and turning "it froze" into a sentence with an
+     * address in it and something to try.
+     */
+    var kernalShortcut by mutableStateOf<Int?>(null)
+        private set
+
     var soundEnabled = settings.sound
 
     /** What is in the drive, if anything, so that writes can be saved back. */
@@ -197,6 +210,9 @@ class EmulatorSession(
 
             if (hurrying != loading) loading = turboWhileLoading && machine.driveBusy
             if (machine.cpu.jammed != stopped) stopped = machine.cpu.jammed
+            if (machine.kernalInternalJump != kernalShortcut) {
+                kernalShortcut = machine.kernalInternalJump
+            }
 
             val track = audio
             if (hurrying || track == null) {

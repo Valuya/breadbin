@@ -134,7 +134,48 @@ class Machine(
      */
     val driveAvailable get() = drive != null || wire != null
 
+    /**
+     * Where a program jumped into the KERNAL past its front door, or null if none has.
+     *
+     * The KERNAL publishes a jump table at $FF81 and everything above it is private: addresses that
+     * were never promised to stay where they are. A great deal of software from the period ignores
+     * that and calls straight into the middle anyway — it was the fastest way to do a thing, and
+     * there was only ever one KERNAL to be compatible with.
+     *
+     * A replacement KERNAL implements the table, because that is the published interface, and has
+     * its own code everywhere else. So a game doing this runs perfectly on Commodore's ROM and
+     * behaves unpredictably on any other — usually a hang, sometimes a jam, sometimes a screen of
+     * nonsense. From the outside all three look like a broken emulator, and none of them is.
+     *
+     * Recording it makes that diagnosable: the machine can say what the program did, and the app
+     * can suggest the one thing that fixes it. It is a note rather than an error — the machine
+     * carries on and the jump may well have been harmless.
+     */
+    var kernalInternalJump: Int? = null
+        private set
+
+    /**
+     * Whether a jump was into the KERNAL's private half.
+     *
+     * Deliberately narrow, because a false alarm here tells somebody to go and find ROMs they did
+     * not need. It has to be the KERNAL actually banked in, the program has to have jumped from
+     * outside ROM — the KERNAL calls itself constantly and that is its own business — and the
+     * target has to miss the jump table, whose entries are the supported way in and are three bytes
+     * apart because each one is a JMP.
+     */
+    private fun noteJump(from: Int, to: Int) {
+        if (kernalInternalJump != null) return
+        if (to < KERNAL_START || !memory.kernalIsVisible) return
+        if (from >= KERNAL_START) return
+        if (from in BASIC_START until BASIC_END && memory.basicIsVisible) return
+        if (to in JUMP_TABLE_FIRST..JUMP_TABLE_LAST && (to - JUMP_TABLE_FIRST) % 3 == 0) return
+        // The hardware vectors are read by the processor, never jumped to, so anything landing up
+        // there is a program that has lost its way rather than one taking a shortcut.
+        kernalInternalJump = to
+    }
+
     init {
+        cpu.jumpWatcher = ::noteJump
         memory.vic = vic
         memory.sid = sid
         memory.cia1 = cia1
@@ -175,6 +216,7 @@ class Machine(
         keystrokes.clear()
         framesSinceReset = 0
         framesUntilKeystrokes = 0
+        kernalInternalJump = null
         cpu.reset()
     }
 
@@ -433,5 +475,24 @@ class Machine(
          * wipe an injected program out from under it.
          */
         const val BOOT_FRAMES = 125
+
+        const val BASIC_START = 0xA000
+
+        /**
+         * BASIC ends at $BFFF, not at the KERNAL. What lies between is $C000..$CFFF, which is
+         * plain RAM with nothing over it and so exactly where a machine-code program puts itself —
+         * treating it as ROM meant the one place this most needed to watch was the one place it
+         * ignored.
+         */
+        const val BASIC_END = 0xC000
+        const val KERNAL_START = 0xE000
+
+        /**
+         * The KERNAL's published entry points: sixty-odd JMPs, three bytes each, from OPEN at
+         * $FF81 to the last of them. Everything above is Commodore's own business and everything
+         * below is the routines themselves.
+         */
+        const val JUMP_TABLE_FIRST = 0xFF81
+        const val JUMP_TABLE_LAST = 0xFFF3
     }
 }
