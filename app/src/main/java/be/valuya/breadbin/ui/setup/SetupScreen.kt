@@ -182,19 +182,24 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
                     showDownload = true
                 },
             )
+            val open = { address: String ->
+                try {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(address)))
+                } catch (_: ActivityNotFoundException) {
+                    problem = Message.Resource(R.string.setup_no_browser)
+                }
+            }
             ListItem(
                 headlineContent = { Text(stringResource(R.string.setup_open_vice)) },
                 supportingContent = { Text(stringResource(R.string.setup_where)) },
                 leadingContent = { Icon(Icons.Filled.OpenInNew, null) },
-                modifier = Modifier.clickable {
-                    try {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse(RomStore.WHERE_TO_GET_ROMS))
-                        )
-                    } catch (_: ActivityNotFoundException) {
-                        problem = Message.Resource(R.string.setup_no_browser)
-                    }
-                },
+                modifier = Modifier.clickable { open(RomStore.WHERE_TO_GET_ROMS) },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setup_open_drive)) },
+                supportingContent = { Text(stringResource(R.string.setup_where_drive)) },
+                leadingContent = { Icon(Icons.Filled.OpenInNew, null) },
+                modifier = Modifier.clickable { open(RomStore.WHERE_TO_GET_DRIVE_ROMS) },
             )
 
             Spacer(Modifier.height(24.dp))

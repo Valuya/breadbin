@@ -218,9 +218,23 @@ class RomStore(private val context: Context) {
         )
 
         /**
-         * Where to send somebody who wants Commodore's ROMs. VICE is the desktop emulator, and it
-         * ships them; the app opens this in a browser rather than fetching anything itself.
+         * Where to send somebody who wants Commodore's ROMs.
+         *
+         * This used to be VICE's front page, on the reasoning that VICE ships the ROMs so pointing
+         * at VICE was enough. It is not: that page is about downloading an emulator and never
+         * mentions a ROM, so anybody following the link arrived somewhere plausible and found
+         * nothing. These go to the folders the files are actually in, which the browser can list
+         * and download one at a time — a phone is not a good place to unpack a fourteen-megabyte
+         * source tarball to get three files out of it.
+         *
+         * The app still fetches nothing by itself: these open in the browser, and the downloader
+         * next door only ever goes to an address somebody typed.
          */
-        const val WHERE_TO_GET_ROMS = "https://vice-emu.sourceforge.io/index.html#download"
+        const val WHERE_TO_GET_ROMS =
+            "https://github.com/VICE-Team/svn-mirror/tree/main/vice/data/C64"
+
+        /** The 1541's DOS lives with the other drives' rather than with the machine's. */
+        const val WHERE_TO_GET_DRIVE_ROMS =
+            "https://github.com/VICE-Team/svn-mirror/tree/main/vice/data/DRIVES"
     }
 }

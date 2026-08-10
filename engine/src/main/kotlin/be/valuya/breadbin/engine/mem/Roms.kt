@@ -97,8 +97,19 @@ class Roms(
         }
 
         /** Whether this is one of Commodore's own KERNALs, rather than a replacement. */
+        /**
+         * Whether this is one of Commodore's KERNALs, as opposed to a replacement or another ROM
+         * of the same size.
+         *
+         * The revision byte alone is not enough and it is worth being clear about why: it is one
+         * byte at one address, and other eight-kilobyte ROMs have bytes there too. Commodore's own
+         * BASIC 901226-01 happens to hold $03 at $FF80 — the same value that means "KERNAL revision
+         * 3" — so a check that asked only that question cheerfully identified BASIC as a KERNAL.
+         * The file has to look like a KERNAL first; the byte then says which one.
+         */
         fun isCommodoreKernal(bytes: ByteArray) =
-            bytes.size == KERNAL_SIZE && (bytes[0xFF80 - 0xE000].toInt() and 0xFF) in KERNAL_REVISIONS
+            identify(bytes) == RomKind.KERNAL &&
+                (bytes[0xFF80 - 0xE000].toInt() and 0xFF) in KERNAL_REVISIONS
 
         fun crc32(bytes: ByteArray): Long =
             java.util.zip.CRC32().apply { update(bytes) }.value
