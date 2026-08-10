@@ -85,10 +85,14 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
         else -> lastWrite
     }
 
+    /** Set by diagnostics to watch what a program actually asks the chip for. Normally null. */
+    var monitor: ((Int, Int) -> Unit)? = null
+
     fun write(register: Int, value: Int) {
         val v = value and 0xFF
         lastWrite = v
         val register = register and 0x1F
+        monitor?.invoke(register, v)
         if (register < 0x15) {
             val voice = voices[register / 7]
             when (register % 7) {
@@ -165,9 +169,16 @@ class Sid(private val clockHz: Int, private val sampleRate: Int) {
 
         // A two-integrator loop: one integrator gives band-pass, the second low-pass, and what is
         // left over is high-pass.
-        val highPass = bandPass * q - lowPass - filtered
-        bandPass += w0 * highPass
+        //
+        // The damping term is subtracted. Adding it — which is what this did — turns the loop from
+        // a filter into an oscillator with gain: every cycle puts in slightly more energy than it
+        // takes out, so anything routed through the filter grows without bound until it sits on the
+        // clamps below. A game that filters one voice at high resonance, which is most of them,
+        // therefore did not get a filtered voice, it got a full-scale buzz over the top of
+        // everything else.
         lowPass += w0 * bandPass
+        val highPass = filtered - lowPass - bandPass * q
+        bandPass += w0 * highPass
         bandPass = bandPass.coerceIn(-4_000_000.0, 4_000_000.0)
         lowPass = lowPass.coerceIn(-4_000_000.0, 4_000_000.0)
 

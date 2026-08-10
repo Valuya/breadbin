@@ -188,4 +188,53 @@ class SidTest {
         sid.write(0x04, 0x41)
         assertEquals(0x41, sid.read(0x04))
     }
+
+    /**
+     * A voice through the filter at full resonance, which is what a game does rather than an edge
+     * case worth guarding against.
+     *
+     * The two-integrator loop had its damping term added instead of subtracted, which is the
+     * difference between a filter and an oscillator with gain. It ran away to the clamps inside a
+     * fraction of a second and stayed there, so a game that filters a voice — Impossible Mission
+     * filters its bass, at resonance fifteen — got a full-scale buzz where the music should be,
+     * with every unfiltered voice clipped flat underneath it.
+     */
+    @Test
+    fun `a filtered voice at full resonance does not run away`() {
+        val sid = sid()
+        sid.play(0)
+        sid.write(0x15, 0x00)
+        sid.write(0x16, 0x30) // a cutoff somewhere in the middle
+        sid.write(0x17, 0xF1) // voice one through the filter, resonance at maximum
+        sid.write(0x18, 0x1F) // low-pass, full volume
+        val peak = sid.peakOver(2.0)
+        assertTrue(
+            "the filter ran away: peaked at %.1f%% of full scale".format(percent(peak)),
+            peak < 32767 * 9 / 10,
+        )
+        assertTrue(
+            "the filter swallowed the voice entirely: peaked at %.1f%%".format(percent(peak)),
+            peak > 32767 / 50,
+        )
+    }
+
+    /** And it has to filter: a note well above the cutoff should come back quieter than one below. */
+    @Test
+    fun `the low-pass takes the top off`() {
+        fun peakAt(cutoffHigh: Int): Int {
+            val sid = sid()
+            sid.play(0, frequency = 0x4000) // a high note
+            sid.write(0x15, 0x00)
+            sid.write(0x16, cutoffHigh)
+            sid.write(0x17, 0x01) // voice one through the filter, no resonance
+            sid.write(0x18, 0x1F) // low-pass
+            return sid.peakOver(0.5)
+        }
+        val wideOpen = peakAt(0xFF)
+        val closedDown = peakAt(0x08)
+        assertTrue(
+            "closing the cutoff changed nothing: $closedDown against $wideOpen",
+            closedDown < wideOpen / 2,
+        )
+    }
 }
