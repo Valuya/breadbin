@@ -96,6 +96,7 @@ class SidTraceTest {
         }
 
         val shortcut = machine.kernalInternalJump
+        println("jammed=${machine.cpu.jammed} pc=$%04X".format(machine.cpu.pc))
         println(
             if (shortcut == null) "no jump into the KERNAL's private half"
             else "jumped into the KERNAL at $%04X — this game wants Commodore's ROMs".format(shortcut)

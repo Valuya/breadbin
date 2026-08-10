@@ -91,9 +91,10 @@ fun EmulatorScreen(
     // machine is built from are in the key; changing the sound or the joystick size is not one.
     val missingNotice = stringResource(R.string.emulator_missing)
     val stoppedNotice = stringResource(R.string.emulator_stopped)
-    // Read whole and formatted below rather than through a context: the address is only
-    // known once the machine has stopped, which is long after composition.
+    // Read whole and formatted below rather than through a context: the address is not known until
+    // the program does it, which is long after composition.
     val stoppedShortcutNotice = stringResource(R.string.emulator_stopped_shortcut)
+    val shortcutNotice = stringResource(R.string.emulator_shortcut)
     val driveRom = remember { romStore.loadDrive() }
     val session = remember(settings.model, item?.file?.path) {
         holder.obtain(settings.model.name + ":" + item?.file?.path) {
@@ -309,17 +310,25 @@ fun EmulatorScreen(
         )
     }
 
-    // A halted processor looks exactly like a hung emulator, and the usual cause has a fix.
+    // Two ways of finding out the ROMs are wrong, and the second does not wait to be asked.
     //
-    // The shortcut on its own is deliberately not worth saying anything about: most software of the
-    // period calls into the KERNAL's private half and a great deal of it works anyway — Boulder
-    // Dash goes through $FEBC and plays fine. It is worth raising once something has actually gone
-    // wrong, and then it is the whole explanation rather than a guess.
+    // A halted processor is the obvious one. The quieter one is a program jumping into the KERNAL's
+    // private half: on the free ROMs that lands in the middle of unrelated code, which sometimes
+    // halts on the next byte — Boulder Dash jumps to $FEBC and jams at $FEBD — and sometimes runs
+    // the wrong routine and carries on, which Impossible Mission does at $E544. The second kind
+    // never stops, so waiting for a stop before saying anything means never saying it.
+    //
+    // Only while the free ROMs are loaded. On Commodore's the jump goes where the program meant and
+    // there is nothing to report.
     LaunchedEffect(session.stopped, session.kernalShortcut) {
-        if (!session.stopped || romStore.source != RomSource.BUNDLED) return@LaunchedEffect
+        if (romStore.source != RomSource.BUNDLED) return@LaunchedEffect
         val shortcut = session.kernalShortcut
-        notice = if (shortcut == null) stoppedNotice
-        else stoppedShortcutNotice.format("%04X".format(shortcut))
+        notice = when {
+            session.stopped && shortcut != null -> stoppedShortcutNotice.format("%04X".format(shortcut))
+            session.stopped -> stoppedNotice
+            shortcut != null -> shortcutNotice.format("%04X".format(shortcut))
+            else -> return@LaunchedEffect
+        }
     }
 
     // A disk transfers at the speed a real 1541 managed, so a game is the better part of a minute

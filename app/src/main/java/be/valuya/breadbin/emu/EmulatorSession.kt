@@ -85,11 +85,17 @@ class EmulatorSession(
     /**
      * The address, if any, at which the running program called into the KERNAL's private half.
      *
-     * Not a fault on its own, and it must not be reported as one: most software of the period did
-     * this, and plenty of it carries on working anyway — Boulder Dash goes through $FEBC on its way
-     * to the interrupt exit and plays perfectly on the free ROMs. What it is good for is saying
-     * *why* when something has actually gone wrong, and turning "it froze" into a sentence with an
-     * address in it and something to try.
+     * This is a prediction and not merely an explanation, which took measuring to establish. The
+     * first guess was that these shortcuts are usually survivable and only worth mentioning once a
+     * machine had already stopped. Running the games says otherwise: Boulder Dash jumps to $FEBC
+     * and, on the free ROMs, jams on the very next byte, because what Commodore put there is the
+     * six bytes that end an interrupt and what the replacement has there is the middle of something
+     * else. Impossible Mission jumps to $E544 for a clear screen and carries on running the wrong
+     * routine. Both work on Commodore's ROMs and neither works without them.
+     *
+     * So when the free ROMs are loaded this is worth saying as soon as it happens, rather than
+     * waiting for a stop that may never come — a game that quietly runs the wrong routine never
+     * halts, it just behaves oddly for ever.
      */
     var kernalShortcut by mutableStateOf<Int?>(null)
         private set
