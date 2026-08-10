@@ -111,14 +111,60 @@ class Roms(
         fun crc32(bytes: ByteArray): Long =
             java.util.zip.CRC32().apply { update(bytes) }.value
 
+        /**
+         * What a file is, decided by reading it rather than by measuring it.
+         *
+         * This used to go entirely on size: eight kilobytes was a BASIC unless its last vector
+         * looked high, four was a character set, sixteen was a drive. Point that at a folder of
+         * assorted Commodore ROMs — which is how they are distributed — and it will confidently
+         * file a C128 MMU as BASIC and half a 1541 DOS as a KERNAL, overwriting the correct ones
+         * that were already there. Every one of those was reported as a successful import.
+         *
+         * So each kind now has to prove itself, and a file that proves nothing is rejected and
+         * said so rather than filed under whatever it is nearest in size to.
+         */
         fun identify(bytes: ByteArray): RomKind? = when {
-            bytes.size == CHARACTER_SIZE -> RomKind.CHARACTER
-            bytes.size == DRIVE_SIZE -> RomKind.DRIVE
-            bytes.size != BASIC_SIZE -> null
-            // The KERNAL's reset vector at $FFFC points into the KERNAL itself ($FCE2 on a stock
-            // machine), so the last six bytes are the give-away.
-            (bytes[0x1FFD].toInt() and 0xFF) >= 0xE0 -> RomKind.KERNAL
-            else -> RomKind.BASIC
+            bytes.size == DRIVE_SIZE && driveRomPassesSelfTest(bytes) -> RomKind.DRIVE
+            bytes.size == CHARACTER_SIZE && looksLikeCharacterSet(bytes) -> RomKind.CHARACTER
+            bytes.size != KERNAL_SIZE -> null
+            looksLikeKernal(bytes) -> RomKind.KERNAL
+            looksLikeBasic(bytes) -> RomKind.BASIC
+            else -> null
+        }
+
+        /**
+         * A KERNAL is mostly a jump table. Twenty-five three-byte entries from $FF81 upwards, every
+         * one of them a JMP, and a reset vector pointing back into itself — which together are
+         * about as unlikely to happen by accident as anything in eight kilobytes can be.
+         */
+        private fun looksLikeKernal(bytes: ByteArray): Boolean {
+            val reset = (bytes[0x1FFC].toInt() and 0xFF) or ((bytes[0x1FFD].toInt() and 0xFF) shl 8)
+            if (reset < 0xE000) return false
+            val jumps = (0xFF81..0xFFEA step 3).count { bytes[it - 0xE000].toInt() and 0xFF == 0x4C }
+            return jumps >= 20
+        }
+
+        /**
+         * A BASIC starts with the two addresses the KERNAL jumps to, cold and warm, and both of
+         * them live in the KERNAL. That is the whole of the handshake between the two ROMs, so
+         * anything claiming to be a BASIC has to have it.
+         */
+        private fun looksLikeBasic(bytes: ByteArray): Boolean {
+            val cold = (bytes[0].toInt() and 0xFF) or ((bytes[1].toInt() and 0xFF) shl 8)
+            val warm = (bytes[2].toInt() and 0xFF) or ((bytes[3].toInt() and 0xFF) shl 8)
+            return cold >= 0xE000 && warm >= 0xE000
+        }
+
+        /**
+         * A character set has no header and no vectors, so there is nothing to check but that it
+         * looks like a font: five hundred and twelve glyphs of eight rows, with something in them
+         * and not everything. A blank or solid four kilobytes is a file that happens to be the
+         * right size.
+         */
+        private fun looksLikeCharacterSet(bytes: ByteArray): Boolean {
+            val distinct = bytes.toHashSet().size
+            val blank = bytes.count { it.toInt() == 0 }
+            return distinct >= 16 && blank < bytes.size * 9 / 10
         }
     }
 }

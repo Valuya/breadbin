@@ -32,6 +32,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -100,8 +101,9 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
     }
 
     val present = remember(version) { RomKind.entries.associateWith { romStore.has(it) } }
+    val using = remember(version) { RomKind.entries.associateWith { romStore.usingSupplied(it) } }
     val described = remember(version) { RomKind.entries.associateWith { romStore.describe(it) } }
-    val complete = present.filterKeys { it.required }.values.all { it }
+    val complete = using.filterKeys { it.required }.values.all { it }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.setup_title)) }) },
@@ -127,17 +129,28 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
             }
 
             Section(stringResource(R.string.setup_section_roms))
-            RomRow(stringResource(R.string.setup_basic), present[RomKind.BASIC] == true, described[RomKind.BASIC])
-            RomRow(stringResource(R.string.setup_kernal), present[RomKind.KERNAL] == true, described[RomKind.KERNAL])
-            RomRow(
-                stringResource(R.string.setup_character),
-                present[RomKind.CHARACTER] == true,
-                described[RomKind.CHARACTER],
-            )
-            // The drive's own ROM is a different computer's, and nothing needs it: disks load
-            // without it. What it buys is fast loaders, which are programs for the drive's own
-            // processor and so need there to be one.
-            RomRow(stringResource(R.string.setup_drive), present[RomKind.DRIVE] == true, described[RomKind.DRIVE])
+            for (kind in RomKind.entries) {
+                RomRow(
+                    label = stringResource(
+                        when (kind) {
+                            RomKind.BASIC -> R.string.setup_basic
+                            RomKind.KERNAL -> R.string.setup_kernal
+                            RomKind.CHARACTER -> R.string.setup_character
+                            // The drive's own ROM is a different computer's, and nothing needs it:
+                            // disks load without it. What it buys is fast loaders, which are
+                            // programs for the drive's processor and so need there to be one.
+                            RomKind.DRIVE -> R.string.setup_drive
+                        }
+                    ),
+                    supplied = present[kind] == true,
+                    using = using[kind] == true,
+                    detail = described[kind],
+                    onToggle = { on ->
+                        romStore.setUsingSupplied(kind, on)
+                        version++
+                    },
+                )
+            }
 
             Section(stringResource(R.string.setup_section_add))
             ListItem(
@@ -288,20 +301,32 @@ private fun Message.resolve(): String = when (this) {
     is Message.Resource -> if (argument == null) stringResource(id) else stringResource(id, argument)
 }
 
+/**
+ * One ROM, and the choice between the user's and the one that came with the app.
+ *
+ * The switch is only live when there is something to switch to. With nothing supplied there is
+ * only ever one answer, and a control that cannot move is worse than no control at all.
+ */
 @Composable
-private fun RomRow(label: String, present: Boolean, detail: String? = null) {
+private fun RomRow(
+    label: String,
+    supplied: Boolean,
+    using: Boolean,
+    detail: String?,
+    onToggle: (Boolean) -> Unit,
+) {
     ListItem(
         headlineContent = { Text(label) },
         supportingContent = detail?.let { { Text(it, style = MaterialTheme.typography.bodySmall) } },
         leadingContent = {
             Icon(
-                imageVector = if (present) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                imageVector = if (using) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
                 contentDescription = null,
-                tint = if (present) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                tint = if (using) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
             )
         },
         trailingContent = {
-            Text(stringResource(if (present) R.string.setup_loaded else R.string.setup_missing))
+            Switch(checked = using, enabled = supplied, onCheckedChange = onToggle)
         },
     )
 }

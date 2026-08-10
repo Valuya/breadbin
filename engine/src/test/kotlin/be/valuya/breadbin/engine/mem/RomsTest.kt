@@ -15,6 +15,62 @@ class RomsTest {
         it[0xFF80 - 0xE000] = revisionByte.toByte()
     }
 
+    /** A KERNAL is mostly a jump table, so a plausible one has to have it. */
+    private fun realisticKernal() = ByteArray(Roms.KERNAL_SIZE).also {
+        for (entry in 0xFF81..0xFFEA step 3) it[entry - 0xE000] = 0x4C
+        it[0x1FFC] = 0xE2.toByte()
+        it[0x1FFD] = 0xFC.toByte()
+        it[0xFF80 - 0xE000] = 0x03
+    }
+
+    private fun realisticBasic() = ByteArray(Roms.BASIC_SIZE).also {
+        it[0] = 0x94.toByte(); it[1] = 0xE3.toByte()   // cold start $E394
+        it[2] = 0x7B; it[3] = 0xE3.toByte()            // warm start $E37B
+    }
+
+    private fun realisticCharacterSet() = ByteArray(Roms.CHARACTER_SIZE) { (it * 37).toByte() }
+
+    @Test
+    fun `each kind is recognised from its contents`() {
+        assertEquals(RomKind.KERNAL, Roms.identify(realisticKernal()))
+        assertEquals(RomKind.BASIC, Roms.identify(realisticBasic()))
+        assertEquals(RomKind.CHARACTER, Roms.identify(realisticCharacterSet()))
+    }
+
+    /**
+     * The case that made all this necessary: a folder of assorted Commodore ROMs, where the sizes
+     * collide and only the contents can tell them apart. Filing any of these as a BASIC or a
+     * KERNAL overwrites a correct one and reports success.
+     */
+    @Test
+    fun `things that are only the right size are refused`() {
+        // Half of a 1541 DOS, which is eight kilobytes and is neither a BASIC nor a KERNAL.
+        val dosHalf = ByteArray(Roms.KERNAL_SIZE) { (it * 3 + 1).toByte() }
+        assertEquals("half a drive ROM was filed as something", null, Roms.identify(dosHalf))
+
+        // A C128 MMU or anything else of the same size with no vectors in it.
+        assertEquals(null, Roms.identify(ByteArray(Roms.BASIC_SIZE)))
+
+        // Vectors that point at RAM rather than into the KERNAL are not a BASIC.
+        val wrongVectors = ByteArray(Roms.BASIC_SIZE).also {
+            it[0] = 0x00; it[1] = 0x20; it[2] = 0x00; it[3] = 0x30
+        }
+        assertEquals(null, Roms.identify(wrongVectors))
+
+        // A sixteen-kilobyte file that is not a drive ROM: it has to add up, not just be big.
+        assertEquals(null, Roms.identify(ByteArray(Roms.DRIVE_SIZE)))
+
+        // And a four-kilobyte file with nothing in it is not a font.
+        assertEquals(null, Roms.identify(ByteArray(Roms.CHARACTER_SIZE)))
+    }
+
+    @Test
+    fun `a KERNAL is not mistaken for a BASIC`() {
+        // Both are eight kilobytes and the KERNAL is checked first, so this is the ordering that
+        // matters rather than a coincidence worth relying on.
+        assertEquals(RomKind.KERNAL, Roms.identify(realisticKernal()))
+    }
+
     @Test
     fun `a KERNAL says which revision it is`() {
         assertTrue(Roms.describe(RomKind.KERNAL, kernal(0x03)).startsWith("Commodore revision 3"))

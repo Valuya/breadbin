@@ -15,7 +15,7 @@
     <string name="setup_basic">BASIC</string>
     <string name="setup_kernal">KERNAL</string>
     <string name="setup_character">Character set</string>
-    <string name="setup_section_roms">ROMs</string>
+    <string name="setup_section_roms">ROMs — switch on to use your own</string>
     <string name="setup_section_add">Add Commodore\'s ROMs</string>
     <string name="setup_took">Took %1$s ROM(s) from what you chose.</string>
     <string name="setup_cancel">Cancel</string>

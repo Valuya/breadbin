@@ -38,10 +38,41 @@ class RomStore(private val context: Context) {
     /** Where the name of the file it came from is kept, so the user can see what they gave us. */
     private fun labelFor(kind: RomKind) = File(directory, "${kind.name.lowercase()}.from")
 
-    fun has(kind: RomKind) = fileFor(kind).length() == kind.size.toLong()
+    /** Its presence means "keep this one but do not use it", which is the off position. */
+    private fun disabledFor(kind: RomKind) = File(directory, "${kind.name.lowercase()}.off")
 
-    /** True when the user has supplied all three of the ROMs the machine itself needs. */
-    val complete get() = RomKind.entries.filter { it.required }.all { has(it) }
+    /**
+     * Whether the supplied ROM of this kind is the one in use, as opposed to the free one.
+     *
+     * Each is switched separately because each fails separately. A KERNAL that halts a game and a
+     * character set from the wrong country are different problems, and being able to put one back
+     * without losing the other is the difference between narrowing a fault down and starting over.
+     */
+    fun usingSupplied(kind: RomKind) = has(kind) && !disabledFor(kind).exists()
+
+    fun setUsingSupplied(kind: RomKind, use: Boolean) {
+        if (use) disabledFor(kind).delete() else disabledFor(kind).writeText("")
+    }
+
+    /**
+     * Whether a usable ROM of this kind is stored.
+     *
+     * Checked by reading it, not by its size on disk. An earlier version of the identification went
+     * on size alone and filed all sorts of things in the wrong places; those files are still there
+     * on anybody's phone who imported them, and a store that trusts its own past decisions would go
+     * on running a C128 MMU as BASIC for ever.
+     */
+    fun has(kind: RomKind) = stored(kind) != null
+
+    private fun stored(kind: RomKind): ByteArray? {
+        val file = fileFor(kind)
+        if (file.length() != kind.size.toLong()) return null
+        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return null
+        return bytes.takeIf { Roms.identify(it) == kind }
+    }
+
+    /** True when all three of the ROMs the machine itself needs are the user's own. */
+    val complete get() = RomKind.entries.filter { it.required }.all { usingSupplied(it) }
 
     val source get() = if (complete) RomSource.SUPPLIED else RomSource.BUNDLED
 
@@ -80,6 +111,8 @@ class RomStore(private val context: Context) {
     /** Stores bytes that have already been identified, whatever they arrived by. */
     fun accept(bytes: ByteArray, kind: RomKind, from: String? = null) {
         fileFor(kind).writeBytes(bytes)
+        // Something the user has just gone and found is something they want used.
+        disabledFor(kind).delete()
         if (from != null) labelFor(kind).writeText(from) else labelFor(kind).delete()
     }
 
@@ -91,34 +124,45 @@ class RomStore(private val context: Context) {
      * think" are indistinguishable from the outside, and the second one is common.
      */
     fun describe(kind: RomKind): String? {
-        if (!has(kind)) {
-            if (kind == RomKind.DRIVE) return null
-            val bundled = runCatching { asset(BUNDLED_FILES.getValue(kind)) }.getOrNull() ?: return null
-            return "Open ROMs (bundled) · " + Roms.describe(kind, bundled)
-        }
-        val bytes = runCatching { fileFor(kind).readBytes() }.getOrNull() ?: return null
         val from = runCatching { labelFor(kind).readText() }.getOrNull()
-        return Roms.describe(kind, bytes) + (from?.let { " · $it" } ?: "")
+        if (fileFor(kind).length() == kind.size.toLong() && stored(kind) == null) {
+            return "Not a valid ${kind.name.lowercase()} ROM, ignored" + (from?.let { " · $it" } ?: "")
+        }
+        if (usingSupplied(kind)) {
+            return Roms.describe(kind, stored(kind)!!) + (from?.let { " · $it" } ?: "")
+        }
+        if (kind == RomKind.DRIVE) {
+            return if (has(kind)) "Off — no 1541, disks load through the built-in drive" else null
+        }
+        val bundled = runCatching { asset(BUNDLED_FILES.getValue(kind)) }.getOrNull() ?: return null
+        return "Open ROMs (bundled) · " + Roms.describe(kind, bundled)
     }
 
-    /** The ROMs to run: Commodore's if they are all here, otherwise the free ones. */
-    fun load(): Roms? = if (complete) loadSupplied() else loadBundled()
-
-    private fun loadSupplied(): Roms? = runCatching {
+    /**
+     * The ROMs to run: each one the user's if it is switched on, and the free one if it is not.
+     *
+     * Mixing the two sets is allowed because the switches are per ROM and refusing would make them
+     * pointless, but it is rarely a good idea: the free ROMs are a rewrite, and BASIC and the
+     * KERNAL are two halves of one program that call into each other at fixed addresses.
+     */
+    fun load(): Roms? = runCatching {
         Roms.of(
-            basic = fileFor(RomKind.BASIC).readBytes(),
-            kernal = fileFor(RomKind.KERNAL).readBytes(),
-            character = fileFor(RomKind.CHARACTER).readBytes(),
+            basic = chosen(RomKind.BASIC),
+            kernal = chosen(RomKind.KERNAL),
+            character = chosen(RomKind.CHARACTER),
         )
     }.getOrNull()
+
+    private fun chosen(kind: RomKind): ByteArray =
+        (if (usingSupplied(kind)) stored(kind) else null)
+            ?: asset(BUNDLED_FILES.getValue(kind))
 
     /**
      * The 1541's DOS, if the user supplied it. Its presence is what decides whether the drive is a
      * real emulated 1541 or the one written in Kotlin.
      */
     fun loadDrive(): IntArray? = runCatching {
-        val bytes = fileFor(RomKind.DRIVE).takeIf { it.length() == RomKind.DRIVE.size.toLong() }
-            ?.readBytes() ?: return null
+        val bytes = (if (usingSupplied(RomKind.DRIVE)) stored(RomKind.DRIVE) else null) ?: return null
         // A drive whose ROM does not add up never reaches its serial routines: it blinks its LED
         // for ever and every load says SEARCHING until the user gives up. Better no real drive at
         // all, which leaves the one written in Kotlin answering the bus perfectly well.
@@ -142,6 +186,7 @@ class RomStore(private val context: Context) {
         for (kind in RomKind.entries) {
             fileFor(kind).delete()
             labelFor(kind).delete()
+            disabledFor(kind).delete()
         }
     }
 
