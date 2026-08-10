@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import be.valuya.breadbin.R
 import be.valuya.breadbin.data.RomDownload
 import be.valuya.breadbin.data.RomDownloadResult
+import be.valuya.breadbin.data.RomSource
 import be.valuya.breadbin.data.RomStore
 import be.valuya.breadbin.engine.mem.RomKind
 import kotlinx.coroutines.launch
@@ -102,8 +104,13 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
 
     val present = remember(version) { RomKind.entries.associateWith { romStore.has(it) } }
     val using = remember(version) { RomKind.entries.associateWith { romStore.usingSupplied(it) } }
+    // What the switch says and what the machine runs are not the same thing: BASIC and the KERNAL
+    // are only used as a pair, so one of them switched on alone is not the one in use.
+    val active = remember(version) {
+        RomKind.entries.associateWith { romStore.inUse(it) == RomSource.SUPPLIED }
+    }
     val described = remember(version) { RomKind.entries.associateWith { romStore.describe(it) } }
-    val complete = using.filterKeys { it.required }.values.all { it }
+    val complete = active.filterKeys { it.required }.values.all { it }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.setup_title)) }) },
@@ -150,6 +157,7 @@ fun SetupScreen(romStore: RomStore, onReady: () -> Unit) {
                     ),
                     supplied = present[kind] == true,
                     using = using[kind] == true,
+                    active = active[kind] == true,
                     detail = described[kind],
                     onToggle = { on ->
                         romStore.setUsingSupplied(kind, on)
@@ -308,12 +316,17 @@ private fun Message.resolve(): String = when (this) {
  *
  * The switch is only live when there is something to switch to. With nothing supplied there is
  * only ever one answer, and a control that cannot move is worse than no control at all.
+ *
+ * [using] is what the switch says and [active] is what the machine is really running, which come
+ * apart when BASIC or the KERNAL is switched on without its other half. The mark on the left
+ * follows [active], because the question it answers is "is this what I am running".
  */
 @Composable
 private fun RomRow(
     label: String,
     supplied: Boolean,
     using: Boolean,
+    active: Boolean,
     detail: String?,
     onToggle: (Boolean) -> Unit,
 ) {
@@ -322,9 +335,17 @@ private fun RomRow(
         supportingContent = detail?.let { { Text(it, style = MaterialTheme.typography.bodySmall) } },
         leadingContent = {
             Icon(
-                imageVector = if (using) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                imageVector = when {
+                    active -> Icons.Filled.CheckCircle
+                    using -> Icons.Filled.Warning
+                    else -> Icons.Outlined.Circle
+                },
                 contentDescription = null,
-                tint = if (using) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                tint = when {
+                    active -> MaterialTheme.colorScheme.primary
+                    using -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.outline
+                },
             )
         },
         trailingContent = {

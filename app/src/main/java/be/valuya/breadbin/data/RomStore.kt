@@ -5,6 +5,7 @@ import android.net.Uri
 import be.valuya.breadbin.engine.Zip
 import be.valuya.breadbin.engine.mem.RomKind
 import be.valuya.breadbin.engine.mem.Roms
+import be.valuya.breadbin.engine.mem.romInUse
 import java.io.File
 
 /** Which set of ROMs the machine is running on. */
@@ -71,8 +72,8 @@ class RomStore(private val context: Context) {
         return bytes.takeIf { Roms.identify(it) == kind }
     }
 
-    /** True when all three of the ROMs the machine itself needs are the user's own. */
-    val complete get() = RomKind.entries.filter { it.required }.all { usingSupplied(it) }
+    /** True when all three of the ROMs the machine itself needs are the user's own, and in use. */
+    val complete get() = RomKind.entries.filter { it.required }.all { inUse(it) == RomSource.SUPPLIED }
 
     val source get() = if (complete) RomSource.SUPPLIED else RomSource.BUNDLED
 
@@ -128,6 +129,13 @@ class RomStore(private val context: Context) {
         if (fileFor(kind).length() == kind.size.toLong() && stored(kind) == null) {
             return "Not a valid ${kind.name.lowercase()} ROM, ignored" + (from?.let { " · $it" } ?: "")
         }
+        // Switched on, but held back because its other half is missing. Saying nothing here is how
+        // a machine ends up booting to a blank screen with every switch looking correct.
+        if (usingSupplied(kind) && inUse(kind) != RomSource.SUPPLIED) {
+            val other = if (kind == RomKind.BASIC) "KERNAL" else "BASIC"
+            return "Not in use — BASIC and the KERNAL must come from the same set, and no valid " +
+                "$other was supplied. Running the bundled pair." + (from?.let { " · $it" } ?: "")
+        }
         if (usingSupplied(kind)) {
             return Roms.describe(kind, stored(kind)!!) + (from?.let { " · $it" } ?: "")
         }
@@ -139,12 +147,22 @@ class RomStore(private val context: Context) {
     }
 
     /**
-     * The ROMs to run: each one the user's if it is switched on, and the free one if it is not.
+     * Where each ROM is actually coming from, which is not always what its switch says.
      *
-     * Mixing the two sets is allowed because the switches are per ROM and refusing would make them
-     * pointless, but it is rarely a good idea: the free ROMs are a rewrite, and BASIC and the
-     * KERNAL are two halves of one program that call into each other at fixed addresses.
+     * BASIC and the KERNAL are not two ROMs, they are one program in two chips: the KERNAL finishes
+     * its reset with `JMP ($A000)` and the two call into each other at fixed addresses for the rest
+     * of the machine's life. The free set is a rewrite, so one of each is not a half-working
+     * machine, it is a machine that never reaches a prompt. Taking one and leaving the other is
+     * therefore not a choice this can offer, however reasonable the two separate switches look:
+     * unless both are the user's, both are the bundled ones.
+     *
+     * The character set has no such problem — it is glyphs, nothing calls into it — and the drive
+     * ROM is a different computer's altogether. Those two stay independent.
      */
+    fun inUse(kind: RomKind): RomSource =
+        if (romInUse(kind, ::usingSupplied)) RomSource.SUPPLIED else RomSource.BUNDLED
+
+    /** The ROMs to run. */
     fun load(): Roms? = runCatching {
         Roms.of(
             basic = chosen(RomKind.BASIC),
@@ -154,7 +172,7 @@ class RomStore(private val context: Context) {
     }.getOrNull()
 
     private fun chosen(kind: RomKind): ByteArray =
-        (if (usingSupplied(kind)) stored(kind) else null)
+        (if (inUse(kind) == RomSource.SUPPLIED) stored(kind) else null)
             ?: asset(BUNDLED_FILES.getValue(kind))
 
     /**

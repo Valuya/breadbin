@@ -178,3 +178,24 @@ enum class RomKind(val size: Int, val required: Boolean) {
     CHARACTER(Roms.CHARACTER_SIZE, true),
     DRIVE(Roms.DRIVE_SIZE, false),
 }
+
+/**
+ * Which ROMs may actually be taken from a user's set, given which of them that set holds.
+ *
+ * BASIC and the KERNAL are not two ROMs, they are one program split across two chips: the KERNAL
+ * ends its reset with `JMP ($A000)` and thereafter the two call each other at fixed addresses. A
+ * free replacement set is a rewrite of both, so one of each is not a partly-compatible machine, it
+ * is a machine that never reaches a prompt — an empty screen, or a banner printing over itself for
+ * ever. Offering two separate switches makes that mixture one tap away, so the rule is enforced
+ * here instead: unless both halves are the user's, neither is used.
+ *
+ * The character set is only glyphs and nothing calls into it, and the drive ROM belongs to another
+ * computer altogether. Those stay independent.
+ *
+ * [suppliedAndOn] answers, for one kind, whether the user has a valid ROM of it switched on.
+ */
+fun romInUse(kind: RomKind, suppliedAndOn: (RomKind) -> Boolean): Boolean = when (kind) {
+    RomKind.BASIC, RomKind.KERNAL ->
+        suppliedAndOn(RomKind.BASIC) && suppliedAndOn(RomKind.KERNAL)
+    else -> suppliedAndOn(kind)
+}
