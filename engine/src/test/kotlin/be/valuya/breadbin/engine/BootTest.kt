@@ -7,6 +7,7 @@ import be.valuya.breadbin.engine.mem.Roms
 import be.valuya.breadbin.engine.tape.Program
 import be.valuya.breadbin.engine.tape.TapImage
 import be.valuya.breadbin.engine.tape.TapWriter
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -196,6 +197,9 @@ class BootTest {
         repeat(200) { machine.runFrame() }
         assertTrue("the drive is busy with nothing to do", !machine.driveBusy)
 
+        // With the wire doing the work, which is what happens for anything that is not a plain
+        // KERNAL LOAD — a game's own loader, or a real 1541 on the end of the bus.
+        machine.fastLoad = false
         machine.type("LOAD\"BIG\",8\r")
         var everBusy = false
         repeat(400) {
@@ -207,6 +211,40 @@ class BootTest {
         // And it lets go afterwards, or the app would run flat out for ever.
         repeat(2000) { machine.runFrame() }
         assertTrue("the drive is still busy long after the load", !machine.driveBusy)
+    }
+
+    /**
+     * The same load again, served rather than sent, which is the default.
+     *
+     * The point of it is that it takes no time at all: the wire moves nothing, and where the slow
+     * path needs hundreds of frames to shift two kilobytes this needs none. What it must not do is
+     * produce a different answer, so this checks the program is really there afterwards.
+     */
+    @Test
+    fun `a plain LOAD is served without touching the wire`() {
+        val roms = roms()
+        assumeTrue(roms != null)
+        val machine = Machine(roms!!)
+
+        val contents = intArrayOf(0x00, 0x20) + IntArray(2000) { (it * 7 + 3) and 0xFF }
+        val disk = D64.blank(Petscii.fromAscii("DISK"), Petscii.fromAscii("01"))
+        disk.writeFile(Petscii.fromAscii("BIG"), contents, 2, false)
+        machine.insertDisk(disk)
+
+        repeat(200) { machine.runFrame() }
+        // Measured across the load rather than from zero: a replacement KERNAL goes looking for
+        // fast loaders on the bus while it starts up, and those bytes are nothing to do with this.
+        val before = machine.wire?.bytesTransferred ?: 0
+        machine.type("LOAD\"BIG\",8,1\r")
+        repeat(120) { machine.runFrame() }
+
+        assertEquals("the wire carried bytes for a load that should not have used it",
+            before, machine.wire?.bytesTransferred)
+        for (i in 2 until contents.size) {
+            val got = machine.memory.peek(0x2000 + i - 2)
+            assertEquals("byte $i of the file is wrong at $%04X".format(0x2000 + i - 2), contents[i], got)
+        }
+        assertTrue("the drive should not look busy for a load it never sent", !machine.driveBusy)
     }
 
     @Test

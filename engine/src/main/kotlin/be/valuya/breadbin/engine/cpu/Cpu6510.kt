@@ -96,9 +96,20 @@ class Cpu6510(private val bus: Bus) {
             return
         }
         interruptDisableSampled = interruptDisable
+        if (beforeInstruction?.invoke(pc) == true) return
         instructionAt = pc
         execute(readPc())
     }
+
+    /**
+     * Consulted before every instruction, with the address about to be executed. Returning true
+     * means something else has dealt with it and moved the program counter on.
+     *
+     * This is how a routine can be answered in Kotlin instead of run: the machine watches for the
+     * KERNAL's published LOAD entry and serves the file itself rather than clocking it down a
+     * serial line one bit at a time.
+     */
+    var beforeInstruction: ((Int) -> Boolean)? = null
 
     /** Where the instruction being executed began, so a jump can say where it came from. */
     private var instructionAt = 0
