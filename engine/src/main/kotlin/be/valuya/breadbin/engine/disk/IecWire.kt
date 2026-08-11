@@ -310,7 +310,18 @@ class IecWire(private val iec: Iec, private val bus: IecBus) {
 
         /** A moment after taking the bus over before clocking anything out. */
         const val TURNAROUND = 1000
-        const val SETTLE = 600
+
+        /**
+         * The gap between pulling the clock down to start a byte and putting the first bit out.
+         *
+         * This was six hundred, which is to say a third of the cost of every byte in a load, and
+         * it was six hundred for no reason anybody wrote down. It only has to outlast the same
+         * thing everything else here does: a badline, during which the listener is not running and
+         * cannot notice the clock has moved. Measured down to thirty it still loads under both
+         * KERNALs; a hundred is taken to keep the same margin as the bit timing rather than to
+         * shave the last few cycles.
+         */
+        const val SETTLE = 100
 
         /** How long "there is a byte ready" is held, which has to outlast a listener's poll loop. */
         const val READY_HOLD = 100
