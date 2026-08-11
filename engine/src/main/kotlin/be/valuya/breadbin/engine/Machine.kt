@@ -155,6 +155,72 @@ class Machine(
         private set
 
     /**
+     * Answers the KERNAL's LOAD, or declines and lets it run.
+     *
+     * Declining is the important half. Anything this is not certain of — a verify, a device that is
+     * not a disk we are holding, a real 1541 fitted, a name that is not there — is handed straight
+     * back, and the KERNAL does it the long way with the same result it always had.
+     */
+    private fun serveLoad(): Boolean {
+        if (!fastLoad || wire == null || !memory.kernalIsVisible) return false
+        // A non-zero accumulator is VERIFY, which compares rather than loads.
+        if (cpu.a != 0) return false
+        val device = memory.peek(0xBA)
+        if (!iec.present(device)) return false
+        val length = memory.peek(0xB7)
+        if (length == 0) return false
+        // Through the banking, not around it. A name can perfectly well sit in ROM — BASIC's own
+        // LOAD"*" points at a literal in the BASIC ROM — and peeking reads the RAM underneath it,
+        // which is whatever was last left there.
+        val nameAt = memory.peek(0xBB) or (memory.peek(0xBC) shl 8)
+        val name = IntArray(length) { memory.read((nameAt + it) and 0xFFFF) }
+
+        // The same conversation the wire would have had, without the wire: the name goes out as an
+        // OPEN on channel zero, and the file comes back off it.
+        iec.addressListener(device)
+        if (!iec.openChannel(0xF0, forWriting = true)) return false
+        for (byte in name) iec.sendToChannel(byte)
+        iec.unlisten()
+        iec.addressTalker(device)
+        if (!iec.openChannel(0x60, forWriting = false)) {
+            iec.untalk()
+            return false
+        }
+        val file = ArrayList<Int>()
+        while (!iec.channelAtEnd) {
+            val byte = iec.readFromChannel()
+            if (byte < 0) break
+            file += byte
+        }
+        iec.untalk()
+        // Two bytes of load address and nothing else is not a file; let the KERNAL report it.
+        if (file.size < 2) return false
+
+        // Secondary zero means "put it where I said", which is what BASIC's LOAD without a comma
+        // does; anything else means the two bytes at the front of the file decide.
+        val secondary = memory.peek(0xB9) and 0x0F
+        val start = if (secondary == 0) cpu.x or (cpu.y shl 8) else file[0] or (file[1] shl 8)
+        for (i in 2 until file.size) {
+            memory.poke((start + i - 2) and 0xFFFF, file[i])
+        }
+        val end = (start + file.size - 2) and 0xFFFF
+
+        // Where the KERNAL leaves its answer: the end address in X and Y and in $AE, the start in
+        // $C3, and end-of-file in the status byte with the carry clear to say nothing went wrong.
+        cpu.x = end and 0xFF
+        cpu.y = (end shr 8) and 0xFF
+        cpu.a = device
+        cpu.carry = false
+        memory.poke(0xAE, end and 0xFF)
+        memory.poke(0xAF, (end shr 8) and 0xFF)
+        memory.poke(0xC3, start and 0xFF)
+        memory.poke(0xC4, (start shr 8) and 0xFF)
+        memory.poke(0x90, 0x40)
+        cpu.returnFromSubroutine()
+        return true
+    }
+
+    /**
      * Whether a jump was into the KERNAL's private half.
      *
      * Deliberately narrow, because a false alarm here tells somebody to go and find ROMs they did
@@ -174,8 +240,24 @@ class Machine(
         kernalInternalJump = to
     }
 
+    /**
+     * Whether a plain KERNAL LOAD is answered here rather than clocked down the serial line.
+     *
+     * The wire is a faithful 1541: a bit at a time, with a pause on each edge long enough that a
+     * computer stopped dead by its video chip still sees it. That is why a game takes the better
+     * part of a minute to start, and no amount of tuning those pauses changes the order of it —
+     * the protocol is the slow part, and it was slow in 1983 too.
+     *
+     * So a plain LOAD is not sent down it. $FFD5 is one of the KERNAL's published entry points, and
+     * the parameters are in the documented zero page rather than anywhere a particular ROM keeps
+     * its private state, so this works under Commodore's ROMs and under a replacement equally. A
+     * program with its own loader never calls it and is not affected by any of this.
+     */
+    var fastLoad = true
+
     init {
         cpu.jumpWatcher = ::noteJump
+        cpu.beforeInstruction = { pc -> pc == KERNAL_LOAD && serveLoad() }
         memory.vic = vic
         memory.sid = sid
         memory.cia1 = cia1
@@ -492,6 +574,9 @@ class Machine(
          * $FF81 to the last of them. Everything above is Commodore's own business and everything
          * below is the routines themselves.
          */
+        /** The KERNAL's published LOAD entry, which is where a plain LOAD always goes. */
+        const val KERNAL_LOAD = 0xFFD5
+
         const val JUMP_TABLE_FIRST = 0xFF81
         const val JUMP_TABLE_LAST = 0xFFF3
     }

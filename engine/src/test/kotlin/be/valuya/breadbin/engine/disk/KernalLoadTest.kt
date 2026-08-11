@@ -115,6 +115,9 @@ class KernalLoadTest {
         // DEVICE NOT PRESENT and the low bits are timeouts, and any of them means the transfer
         // limped rather than worked.
         assertEquals("the KERNAL recorded faults, ST = %02X".format(status), 0x40, status)
+        // Served rather than sent: a plain LOAD should not put a single bit on the wire.
+        assertEquals("the load went down the wire instead of being served",
+            0L, machine.wire?.bytesTransferred)
         // The file says it starts at $2000 and is as long as it is, so the KERNAL should stop just
         // past the end of it.
         assertEquals("the file did not land where it says it does", 0x2000 + CONTENTS.size - 2, end)
