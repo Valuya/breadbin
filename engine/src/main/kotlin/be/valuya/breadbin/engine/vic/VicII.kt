@@ -315,19 +315,39 @@ class VicII(
      */
     private fun drawCycle() {
         val x0 = xOfCycle(cycle)
-        for (i in 0 until 8) {
-            val x = (x0 + i) and 0x1FF
-            // Rule 1: the right edge sets the main flip-flop.
-            if (x == rightComparison()) mainBorder = true
-            // Rules 4, 5 and 6, all of which fire at the left edge.
-            if (x == leftComparison()) {
-                if (rasterY == bottomComparison()) verticalBorder = true
-                if (rasterY == topComparison() && displayEnable) verticalBorder = false
-                if (!verticalBorder) mainBorder = false
-            }
+        // None of the four edges can move inside a cycle: they come from two register bits, and the
+        // processor is not running while these eight pixels are drawn. Read once rather than once
+        // per pixel — at eight pixels a cycle these four were being worked out thirty million times
+        // a second to give the same four answers.
+        val right = rightComparison()
+        val left = leftComparison()
+        val bottom = bottomComparison()
+        val top = topComparison()
+
+        // Almost every cycle is wholly inside the border or wholly inside the picture: only two
+        // cycles a line contain an edge at all, and only one wraps past pixel 511. When the flip
+        // flop cannot move across these eight pixels there is nothing to decide per pixel — either
+        // eight identical writes, which the run-fill does far faster, or none at all.
+        if (x0 + 7 < 0x200 && right !in x0..x0 + 7 && left !in x0..x0 + 7) {
             if (mainBorder) {
-                lineBorder[x] = true
-                lineBorderColour[x] = borderColour
+                java.util.Arrays.fill(lineBorder, x0, x0 + 8, true)
+                java.util.Arrays.fill(lineBorderColour, x0, x0 + 8, borderColour)
+            }
+        } else {
+            for (i in 0 until 8) {
+                val x = (x0 + i) and 0x1FF
+                // Rule 1: the right edge sets the main flip-flop.
+                if (x == right) mainBorder = true
+                // Rules 4, 5 and 6, all of which fire at the left edge.
+                if (x == left) {
+                    if (rasterY == bottom) verticalBorder = true
+                    if (rasterY == top && displayEnable) verticalBorder = false
+                    if (!verticalBorder) mainBorder = false
+                }
+                if (mainBorder) {
+                    lineBorder[x] = true
+                    lineBorderColour[x] = borderColour
+                }
             }
         }
 
@@ -371,6 +391,21 @@ class VicII(
             else -> busRead(characterBase or (character shl 3) or rowCounter)
         }
         videoCounter = (videoCounter + 1) and 0x3FF
+
+        // Ordinary text, which is what almost everything on the screen almost always is. Deciding
+        // the mode once instead of inside every pixel is worth doing here and nowhere else: this
+        // loop runs eight times a cycle for forty cycles of every line of every frame.
+        if (!bitmapMode && !extendedColour && !(multicolour && colour and 0x08 != 0)) {
+            val ink = colour and 0x0F
+            val paper = backgroundColour[0] and 0x0F
+            for (i in 0 until 8) {
+                val x = (start + i) and 0x1FF
+                val set = data and (0x80 shr i) != 0
+                lineColour[x] = if (set) ink else paper
+                lineForeground[x] = set
+            }
+            return
+        }
 
         for (i in 0 until 8) {
             val x = (start + i) and 0x1FF

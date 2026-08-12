@@ -45,6 +45,41 @@ class ThroughputBench {
         measure("whole machine", 2000, Machine(roms!!))
     }
 
+    /**
+     * A sampling profiler, because guessing at this has not worked.
+     *
+     * A second thread takes the emulation thread's stack every so often and counts what is on top
+     * of it. That is what a profiler does, and doing it here rather than reasoning about the code
+     * means the answer comes from the program actually running.
+     */
+    @Test
+    fun `what is it actually doing`() {
+        val roms = roms()
+        assumeTrue(roms != null)
+        val machine = Machine(roms!!)
+        repeat(500) { machine.runFrame() }
+
+        val counts = HashMap<String, Int>()
+        val worker = Thread { repeat(6000) { machine.runFrame() } }
+        worker.start()
+        while (worker.isAlive) {
+            val stack = worker.stackTrace
+            // The innermost frame that is ours: below that is the JDK, above it the callers.
+            stack.firstOrNull { it.className.startsWith("be.valuya") }?.let {
+                val name = it.className.substringAfterLast('.') + "." + it.methodName
+                counts[name] = (counts[name] ?: 0) + 1
+            }
+            Thread.sleep(0, 200_000)
+        }
+        worker.join()
+
+        val total = counts.values.sum().coerceAtLeast(1)
+        println("=== where the time goes, $total samples ===")
+        counts.entries.sortedByDescending { it.value }.take(14).forEach { (name, n) ->
+            println("%-40s %5.1f%%  %s".format(name, 100.0 * n / total, "#".repeat(n * 40 / total)))
+        }
+    }
+
     /** Each chip on its own, clocked the number of times a second of machine time would. */
     @Test
     fun `where the cycles go`() {
