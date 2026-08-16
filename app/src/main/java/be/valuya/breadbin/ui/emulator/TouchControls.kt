@@ -60,9 +60,17 @@ fun TouchControls(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(stickRadius, fireRadius) {
-                    val stickCentre = Offset(margin + stickRadius, size.height - margin - stickRadius)
-                    val fireCentre =
-                        Offset(size.width - margin - fireRadius, size.height - margin - fireRadius)
+                    // Never further down than the box is tall: with the keyboard open the picture
+                    // is a short strip, and a control placed a fixed distance from the bottom of a
+                    // short strip is a control half off the top of it.
+                    val stickCentre = Offset(
+                        margin + stickRadius,
+                        (size.height - margin - stickRadius).coerceAtLeast(stickRadius),
+                    )
+                    val fireCentre = Offset(
+                        size.width - margin - fireRadius,
+                        (size.height - margin - fireRadius).coerceAtLeast(fireRadius),
+                    )
                     // Generous catch areas: a thumb aiming for the stick rarely lands on it.
                     val stickCatch = stickRadius * 1.6f
                     val fireCatch = fireRadius * 1.5f
@@ -120,8 +128,14 @@ fun TouchControls(
                     }
                 }
         ) {
-            val stickCentre = Offset(margin + stickRadius, size.height - margin - stickRadius)
-            val fireCentre = Offset(size.width - margin - fireRadius, size.height - margin - fireRadius)
+            val stickCentre = Offset(
+                margin + stickRadius,
+                (size.height - margin - stickRadius).coerceAtLeast(stickRadius),
+            )
+            val fireCentre = Offset(
+                size.width - margin - fireRadius,
+                (size.height - margin - fireRadius).coerceAtLeast(fireRadius),
+            )
             // Everything is drawn twice: a dark halo, then a bright line on top of it. A single
             // white line at half opacity is what these were, and on a game that is mostly black —
             // which is most of them — a grey line on black is very nearly nothing at all. Two

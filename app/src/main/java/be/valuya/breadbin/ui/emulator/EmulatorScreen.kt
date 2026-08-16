@@ -166,13 +166,31 @@ fun EmulatorScreen(
             .background(Color.Black)
     ) {
         Column(Modifier.fillMaxSize()) {
-            Display(
-                session = session,
-                settings = settings,
+            // The stick and the button live over the picture rather than beside it, and the
+            // keyboard takes a strip of its own underneath. Opening the keyboard used to remove
+            // them outright, which meant a game wanting a key and a joystick at once — every game
+            // with a menu — could have one or the other.
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-            )
+            ) {
+                Display(
+                    session = session,
+                    settings = settings,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                TouchControls(
+                    scale = settings.stickSize,
+                    opacity = settings.opacity,
+                    onState = { state ->
+                        session.joystick(port, state.up, state.down, state.left, state.right, state.fire)
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .safeDrawingPadding(),
+                )
+            }
             if (showKeyboard) {
                 VirtualKeyboard(
                     onPress = session::press,
@@ -180,19 +198,6 @@ fun EmulatorScreen(
                     onRestore = session::restore,
                 )
             }
-        }
-
-        if (!showKeyboard) {
-            TouchControls(
-                scale = settings.stickSize,
-                opacity = settings.opacity,
-                onState = { state ->
-                    session.joystick(port, state.up, state.down, state.left, state.right, state.fire)
-                },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .safeDrawingPadding(),
-            )
         }
 
         Row(
