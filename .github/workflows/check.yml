@@ -1,0 +1,57 @@
+# The checks that were being run by hand until now.
+#
+# Nothing here needs a secret, so it runs on a fork's pull request too. It
+# deliberately stops short of building a release bundle: that needs the upload
+# key, and a check that cannot run without one is a check that does not run.
+name: Check
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The engine's tests are the ones worth having. They run without any ROM:
+      # everything that needs Commodore's is skipped rather than failed, because
+      # those files cannot live in this repository and a check nobody can run on
+      # a clone is not a check. Set BREADBIN_ROMS locally to include them.
+      - name: Unit tests
+        run: ./gradlew test
+
+      - name: Lint
+        run: ./gradlew lintDebug
+
+      # The listing is checked against Play's limits here rather than at upload
+      # time, where being over is a rejection and being just under is a silent
+      # truncation somebody notices in the store.
+      - name: Store listing
+        run: python3 tools/check_listing.py
+
+      # Proof the app still assembles, and something to install from a pull
+      # request without building it locally.
+      - name: Debug APK
+        run: ./gradlew :app:assembleDebug
+
+      # Attaching the APK is a convenience, not a verdict: the account's
+      # artifact storage is shared and finite, and a full disk somewhere is not
+      # a fault in the diff. The step still shows as failed in the run, so it is
+      # not hidden, but it no longer speaks for the code.
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: breadbin-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
