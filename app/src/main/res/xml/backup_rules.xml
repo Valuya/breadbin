@@ -5,5 +5,10 @@
 -->
 <full-backup-content>
     <include domain="file" path="media/" />
+    <!-- Where the settings really live: preferencesDataStore("settings") writes under
+         files/datastore/, which "sharedpref" does not cover. Without this line the comment above
+         was a statement of intent that the rules did not carry out — the library travelled and
+         every setting reset itself on the new phone. -->
+    <include domain="file" path="datastore/" />
     <include domain="sharedpref" path="." />
 </full-backup-content>

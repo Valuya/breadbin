@@ -43,7 +43,20 @@ artefact, so a fresh clone builds for anyone. That is deliberate: an unsigned
 bundle is obviously not shippable, whereas a debug-signed one looks fine right
 up until Play rejects it.
 
-## 2. Build the bundle
+## 2. Bump the version
+
+`versionCode` must increase for every upload — Play rejects a repeat. Both live
+in `app/build.gradle.kts`:
+
+- `versionCode` — an integer, monotonic, never reused.
+- `versionName` — what players see.
+
+Do this **before** building. The version is compiled into the bundle, so bumping
+it after step 3 leaves you holding an artefact with the previous `versionCode` —
+which Play rejects on upload, or, worse, accepts as the release you did not mean
+to ship.
+
+## 3. Build the bundle
 
 ```sh
 ./gradlew clean test lintDebug bundleRelease
@@ -63,14 +76,6 @@ The engine tests skip anything needing Commodore's ROMs rather than failing, so
 a clean run does not mean those ran. Point `BREADBIN_ROMS` at a directory holding
 a BASIC, a KERNAL and a character ROM to include them, and do that before a
 release — they are the tests that cover loading under the ROMs most people use.
-
-## 3. Bump the version
-
-`versionCode` must increase for every upload — Play rejects a repeat. Both live
-in `app/build.gradle.kts`:
-
-- `versionCode` — an integer, monotonic, never reused.
-- `versionName` — what players see.
 
 ## 4. Store listing
 

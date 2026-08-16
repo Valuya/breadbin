@@ -24,7 +24,14 @@ def sections(text):
 
 def main():
     failed = False
-    for path in sorted(pathlib.Path("store").glob("listing-*.md")):
+    listings = sorted(pathlib.Path("store").glob("listing-*.md"))
+    if not listings:
+        # Zero files means the loop below never runs and the check passes without
+        # checking anything, which is how a renamed or deleted listing turns the
+        # validation off silently and stays off.
+        print("OVER no store/listing-*.md found — nothing was checked")
+        return 1
+    for path in listings:
         text = path.read_text(encoding="utf-8")
         seen = set()
         for heading, body in sections(text):
