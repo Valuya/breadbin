@@ -83,12 +83,32 @@ release — they are the tests that cover loading under the ROMs most people use
 `tools/check_listing.py` checks them against Play's limits (30 / 80 / 4000
 characters), which are enforced on upload and silently truncating in places.
 
-Still to produce, none of which live in this repository yet:
+The pictures are generated rather than checked in by hand:
 
-- Icon, 512×512 PNG.
-- Feature graphic, 1024×500.
-- Screenshots, at least 2 and up to 8.
-- The privacy policy hosted at a public URL.
+- `python3 tools/make_store_art.py` draws `store/art/icon-512.png` and
+  `store/art/feature-1024.png`. It renders the launcher icon's own vector
+  drawables — an Android `<vector>`'s `pathData` is SVG path data — so the
+  breadbin in the listing cannot drift from the one on the home screen. Needs
+  Pillow and Inkscape.
+- `tools/screenshots.sh` captures `store/screenshots/en/`, five 1080×1920 PNGs,
+  from a booted emulator with `app-debug.apk` built. Play wants at least two
+  and takes up to eight.
+
+Two things about the screenshots that are decisions rather than mechanics:
+
+- The running-machine picture is **Just BASIC** on the bundled Open ROMs, not a
+  game. It is the one screenshot of a working C64 that raises no question about
+  what is being distributed — see §6.
+- The "Find games" picture searches for `gazette`, which returns Compute!'s
+  Gazette type-ins. A broader query against the Internet Archive's C64
+  collection turns up crack-group tags on commercial titles and, a little
+  further down, profanity in a title. Either one in a store screenshot is
+  exactly what a reviewer looking at an emulator is looking for.
+
+Still to do outside the repository:
+
+- The privacy policy hosted at a public URL. `store/privacy-policy.html` is
+  ready; the Console will not accept a file.
 
 ## 5. What to tell the Console
 
