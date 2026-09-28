@@ -18,6 +18,12 @@ on:
       - "v*"
   # So a release can be rehearsed, or rebuilt, without minting a tag for it.
   workflow_dispatch:
+    inputs:
+      track:
+        description: Play track, when Play is configured
+        type: choice
+        default: internal
+        options: [internal, alpha, beta, production]
 
 permissions:
   contents: write
@@ -64,9 +70,28 @@ jobs:
           BREADBIN_STORE_PASSWORD: ${{ secrets.BREADBIN_STORE_PASSWORD }}
           BREADBIN_KEY_ALIAS: ${{ secrets.BREADBIN_KEY_ALIAS }}
           BREADBIN_KEY_PASSWORD: ${{ secrets.BREADBIN_KEY_PASSWORD }}
-        run: ./gradlew :app:bundleRelease
+          # Play accepts a version code exactly once, and `versionCode` in the
+          # build file is a constant. Without this every run would produce the
+          # same number: the first upload succeeds, every one after it is
+          # refused, and the build that produced it looked fine.
+          #
+          # `run_number` counts runs of this workflow, not of the repository, so
+          # it starts at 1 here. The offset keeps CI clear of the 1-99 range
+          # kept for builds made by hand. Raise it, never lower it.
+          #
+          # The arithmetic is here rather than in the ${{ }} above because that
+          # expression language has no `+`. Written there it is not a wrong
+          # number, it is an invalid workflow file: GitHub refuses the run
+          # before allocating a runner, so the failure arrives with no job and
+          # no log to read.
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          export BREADBIN_VERSION_CODE=$((100 + RUN_NUMBER))
+          echo "Building version code $BREADBIN_VERSION_CODE"
+          ./gradlew :app:bundleRelease
 
       - name: Confirm it is actually signed
+        id: signed
         run: |
           # An unsigned bundle is what this build produces when the key is
           # missing, and it is not obvious by looking at one. Play would say so
@@ -81,14 +106,6 @@ jobs:
         if: always()
         run: rm -f upload.jks
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: breadbin-bundle
-          path: app/build/outputs/bundle/release/app-release.aab
-          # Long enough to upload it by hand without being a permanent copy of a
-          # signed artefact sitting in the open.
-          retention-days: 14
-
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -100,3 +117,51 @@ jobs:
             app/build/outputs/bundle/release/app-release.aab \
             || gh release upload "${GITHUB_REF_NAME}" \
                  app/build/outputs/bundle/release/app-release.aab --clobber
+
+      # Signing and uploading are two different credentials: the key above signs
+      # the bundle, this pushes it. Skipped rather than failed when the service
+      # account is absent, so the bundle still reaches the GitHub release on a
+      # repository that has never been wired to Play.
+      - name: Is Play configured?
+        id: play
+        env:
+          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$SA" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::PLAY_SERVICE_ACCOUNT_JSON is not set — built and attached, not uploaded to Play."
+          fi
+
+      - name: Upload to Play
+        if: steps.play.outputs.configured == 'true'
+        # Pinned to a commit, not a tag: this action is handed a credential that
+        # can publish to the account, and a tag can be moved under you.
+        uses: r0adkll/upload-google-play@935ef9c68bb393a8e6116b1575626a7f5be3a7fb # v1.1.3
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: be.valuya.breadbin
+          releaseFiles: app/build/outputs/bundle/release/app-release.aab
+          # `internal` by default so a tag cannot reach players by accident;
+          # promote from the Console, or dispatch with production once a release
+          # has been through it.
+          track: ${{ inputs.track || 'internal' }}
+          status: completed
+          changesNotSentForReview: false
+
+      # After the release and after Play, deliberately. Actions artifact storage
+      # is a shared quota that fills up, and a run that had already published
+      # would otherwise throw that away by dying here first. Kept alive past a
+      # failure above, because the failures worth having a bundle for are the
+      # ones after it is built: a rejected publish is a credentials problem, and
+      # being handed the binary that was rejected is most of how you tell which.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.signed.conclusion == 'success' }}
+        continue-on-error: true
+        with:
+          name: breadbin-bundle
+          path: app/build/outputs/bundle/release/app-release.aab
+          # Short: a signed artefact sitting in the open is not something to keep
+          # for a fortnight, and the quota it holds is the quota the next run needs.
+          retention-days: 7

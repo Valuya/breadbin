@@ -20,6 +20,17 @@ val keystoreProperties = Properties().apply {
 fun uploadKey(property: String, variable: String): String? =
     keystoreProperties.getProperty(property) ?: System.getenv(variable)
 
+/**
+ * Play accepts a given version code exactly once, and the one below is a constant. A job that
+ * publishes therefore needs a fresh number every run, or the first upload succeeds and every one
+ * after it is refused — after a green build, for a reason the build never mentions.
+ *
+ * CI passes 100 + its run number; a plain clone stays at 1, so what a contributor builds does not
+ * depend on where they built it. `versionName` is deliberately not derived from this: it is what
+ * players read, and it changes when someone decides it should, not when a robot runs.
+ */
+val buildVersionCode = System.getenv("BREADBIN_VERSION_CODE")?.toInt() ?: 1
+
 android {
     namespace = "be.valuya.breadbin"
     compileSdk = 37
@@ -28,7 +39,7 @@ android {
         applicationId = "be.valuya.breadbin"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
+        versionCode = buildVersionCode
         versionName = "1.0"
     }
 
